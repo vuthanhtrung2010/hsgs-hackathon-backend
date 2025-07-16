@@ -1,0 +1,105 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  studentId     String   @unique
+  name          String   @default("")
+  shortName     String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // User ratings per cluster
+  userRatings   UserRating[]
+  // Quiz submissions
+  submissions   QuizSubmission[]
+  
+  @@map("users")
+}
+
+model Quiz {
+  id                  Int      @id
+  title               String
+  quizPointsPossible  Float?
+  cluster             Cluster?
+  Rq                  Float    @default(2000) // Question rating
+  submissionCount     Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  // Quiz submissions
+  submissions         QuizSubmission[]
+  
+  @@map("quizzes")
+}
+
+model UserRating {
+  id        String   @id @default(cuid())
+  userId    String
+  cluster   Cluster
+  Ru        Float    @default(1500) // User rating for this cluster
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, cluster])
+  @@map("user_ratings")
+}
+
+model QuizSubmission {
+  id                    String   @id @default(cuid())
+  userId                String
+  quizId                Int
+  score                 Float
+  maxScore              Float
+  workflowState         String
+  finishedAt            DateTime?
+  submittedAt           DateTime?
+  canvasSubmissionId    String?  @unique
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quiz                  Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, quizId])
+  @@map("quiz_submissions")
+}
+
+model CronHistory {
+  id        String   @id @default(cuid())
+  lastRun   DateTime
+  createdAt DateTime @default(now())
+  
+  @@map("cron_history")
+}
+
+enum Cluster {
+  ART
+  BUSINESS
+  COMMUNICATION
+  CRIME
+  ECONOMY
+  EDUCATION
+  ENVIRONMENT
+  FAMILY_AND_CHILDREN
+  FOOD
+  HEALTH
+  LANGUAGE
+  MEDIA
+  READING
+  TECHNOLOGY
+  TRANSPORT
+  TRAVEL
+}
