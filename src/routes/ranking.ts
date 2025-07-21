@@ -1,6 +1,5 @@
 import { Elysia } from 'elysia';
 import { db } from '../db.js';
-import { CLUSTER_NAMES, type Clusters } from '../types.js';
 
 export const rankingRoutes = new Elysia({ prefix: '/api/ranking' })
   .get('/:courseId', async ({ params: { courseId } }) => {
@@ -8,10 +7,12 @@ export const rankingRoutes = new Elysia({ prefix: '/api/ranking' })
       // Get all users for the specified course
       const users = await db.user.findMany({
         where: { courseId },
-        include: {
-          quizzes: {
-            include: { question: true }
-          }
+        select: {
+          studentId: true,
+          name: true,
+          shortName: true,
+          rating: true,
+          courseId: true
         }
       });
 
@@ -19,8 +20,21 @@ export const rankingRoutes = new Elysia({ prefix: '/api/ranking' })
         return [];
       }
 
-      // Group users by studentId and calculate averages
-      const userMap: Record<string, any> = {};
+      // Get course information
+      const course = await db.course.findUnique({
+        where: { id: courseId },
+        select: { name: true }
+      });
+
+      const courseName = course?.name || `Course ${courseId}`;
+
+      // Group users by studentId and calculate average ratings
+      const userMap: Record<string, {
+        studentId: string;
+        name: string;
+        shortName: string;
+        ratings: number[];
+      }> = {};
 
       for (const user of users) {
         if (!userMap[user.studentId]) {
@@ -28,36 +42,27 @@ export const rankingRoutes = new Elysia({ prefix: '/api/ranking' })
             studentId: user.studentId,
             name: user.name,
             shortName: user.shortName,
-            ratings: [],
-            clusters: {} as Clusters
+            ratings: []
           };
         }
-
-        userMap[user.studentId].ratings.push(user.rating);
-        userMap[user.studentId].clusters[user.cluster] = user.rating;
+        userMap[user.studentId]!.ratings.push(user.rating);
       }
 
       // Calculate average ratings and create ranking
-      const ranking = Object.values(userMap).map((userData: any) => {
-        const validRatings = userData.ratings.filter((r: number) => r > 0);
-        const averageRating = validRatings.length > 0 
-          ? validRatings.reduce((sum: number, rating: number) => sum + rating, 0) / validRatings.length
-          : 1500;
-
-        // Fill missing clusters with null
-        const clusters: Clusters = {};
-        for (const cluster of CLUSTER_NAMES) {
-          clusters[cluster] = userData.clusters[cluster] || null;
-        }
+      const ranking = Object.values(userMap).map((userData) => {
+        const averageRating = userData.ratings.reduce((sum, rating) => sum + rating, 0) / userData.ratings.length;
 
         return {
-          studentId: userData.studentId,
+          id: parseInt(userData.studentId), // Canvas user ID as number
           name: userData.name,
           shortName: userData.shortName,
-          averageRu: Math.round(averageRating),
-          clusters
+          course: {
+            courseId: parseInt(courseId),
+            courseName,
+            rating: Math.round(averageRating)
+          }
         };
-      }).sort((a: any, b: any) => b.averageRu - a.averageRu);
+      }).sort((a, b) => b.course.rating - a.course.rating);
 
       return ranking;
     } catch (error) {
@@ -68,25 +73,44 @@ export const rankingRoutes = new Elysia({ prefix: '/api/ranking' })
 
   .get('/', async () => {
     try {
-      // Default behavior - get ranking for the first course or all courses combined
+      // Default behavior - get ranking for the default course
       const defaultCourseId = process.env.COURSE_ID;
       
       if (!defaultCourseId) {
         return { error: 'No default course ID configured' };
       }
 
-      // Redirect to specific course ranking
+      // Get all users for the default course
       const users = await db.user.findMany({
         where: { courseId: defaultCourseId },
-        include: {
-          quizzes: {
-            include: { question: true }
-          }
+        select: {
+          studentId: true,
+          name: true,
+          shortName: true,
+          rating: true,
+          courseId: true
         }
       });
 
-      // ... same logic as above but for default course
-      const userMap: Record<string, any> = {};
+      if (!users.length) {
+        return [];
+      }
+
+      // Get course information
+      const course = await db.course.findUnique({
+        where: { id: defaultCourseId },
+        select: { name: true }
+      });
+
+      const courseName = course?.name || `Course ${defaultCourseId}`;
+
+      // Group users by studentId and calculate average ratings
+      const userMap: Record<string, {
+        studentId: string;
+        name: string;
+        shortName: string;
+        ratings: number[];
+      }> = {};
 
       for (const user of users) {
         if (!userMap[user.studentId]) {
@@ -94,34 +118,27 @@ export const rankingRoutes = new Elysia({ prefix: '/api/ranking' })
             studentId: user.studentId,
             name: user.name,
             shortName: user.shortName,
-            ratings: [],
-            clusters: {} as Clusters
+            ratings: []
           };
         }
-
-        userMap[user.studentId].ratings.push(user.rating);
-        userMap[user.studentId].clusters[user.cluster] = user.rating;
+        userMap[user.studentId]!.ratings.push(user.rating);
       }
 
-      const ranking = Object.values(userMap).map((userData: any) => {
-        const validRatings = userData.ratings.filter((r: number) => r > 0);
-        const averageRating = validRatings.length > 0 
-          ? validRatings.reduce((sum: number, rating: number) => sum + rating, 0) / validRatings.length
-          : 1500;
-
-        const clusters: Clusters = {};
-        for (const cluster of CLUSTER_NAMES) {
-          clusters[cluster] = userData.clusters[cluster] || null;
-        }
+      // Calculate average ratings and create ranking
+      const ranking = Object.values(userMap).map((userData) => {
+        const averageRating = userData.ratings.reduce((sum, rating) => sum + rating, 0) / userData.ratings.length;
 
         return {
-          studentId: userData.studentId,
+          id: parseInt(userData.studentId), // Canvas user ID as number
           name: userData.name,
           shortName: userData.shortName,
-          averageRu: Math.round(averageRating),
-          clusters
+          course: {
+            courseId: parseInt(defaultCourseId),
+            courseName,
+            rating: Math.round(averageRating)
+          }
         };
-      }).sort((a: any, b: any) => b.averageRu - a.averageRu);
+      }).sort((a, b) => b.course.rating - a.course.rating);
 
       return ranking;
     } catch (error) {
