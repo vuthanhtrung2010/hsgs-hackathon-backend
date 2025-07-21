@@ -2,12 +2,64 @@ import { db } from '../db.js';
 import { fetchAllQuizzes, fetchAllUpdatedSubmissions, fetchUserProfile } from '../utils/canvas.js';
 import { parseCluster } from '../utils/parseCluster.js';
 import { updateRatings } from '../utils/elo.js';
+import { COURSES_CONFIG } from '../config.js';
 import type { CanvasSubmission } from '../types.js';
 
 const CONCURRENCY_LIMIT = 5; // Maximum concurrent operations
 
-// Cache for user profiles to avoid duplicate API calls
-const userProfileCache = new Map<string, { name: string; short_name: string }>();
+// Cache to avoid multiple API calls for the same user
+const userProfileCache = new Map<string, any>();
+
+// Function to sync course information
+async function syncCourseInfo(courseId: string) {
+  try {
+    // Fetch course info from Canvas API
+    const response = await fetch(`${process.env.CANVAS_BASE_URL}/courses/${courseId}`, {
+      headers: {
+        'Authorization': `Bearer ${process.env.CANVAS_ACCESS_TOKEN}`
+      }
+    });
+    
+    if (!response.ok) {
+      console.log(`Failed to fetch course ${courseId} from Canvas`);
+      return;
+    }
+    
+    const courseData = await response.json() as { name?: string; id: string };
+    
+    // Check if course exists in database
+    const existingCourse = await db.course.findUnique({
+      where: { id: courseId }
+    });
+    
+    if (existingCourse) {
+      // Update if name changed
+      if (existingCourse.name !== courseData.name) {
+        await db.course.update({
+          where: { id: courseId },
+          data: { 
+            name: courseData.name || `Course ${courseId}`,
+            updatedAt: new Date()
+          }
+        });
+        console.log(`Updated course ${courseId} name to: ${courseData.name}`);
+      }
+    } else {
+      // Create new course
+      await db.course.create({
+        data: {
+          id: courseId,
+          name: courseData.name || `Course ${courseId}`,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }
+      });
+      console.log(`Created new course ${courseId}: ${courseData.name}`);
+    }
+  } catch (error) {
+    console.error(`Error syncing course ${courseId}:`, error);
+  }
+}
 
 /**
  * Get user profile with caching
@@ -42,6 +94,9 @@ async function processWithConcurrency<T, R>(
  */
 export async function syncCourseSubmissions(courseId: string): Promise<void> {
   console.log(`Starting sync for course ${courseId}`);
+
+  // First, sync course information
+  await syncCourseInfo(courseId);
 
   // Get last sync time or use epoch if first sync
   let lastSync = new Date('1970-01-01T00:00:00Z');
@@ -272,5 +327,38 @@ async function processSubmission(
 
   if (result) {
     console.log(`Successfully processed submission ${submission.id}`);
+  }
+}
+
+/**
+ * Sync all configured courses
+ */
+export async function syncAllCourses(): Promise<{ success: boolean; message: string }> {
+  const startTime = Date.now();
+  
+  try {
+    console.log('Starting sync for all configured courses...');
+    
+    // Sync all courses from config
+    for (const courseConfig of COURSES_CONFIG) {
+      console.log(`Syncing course: ${courseConfig.id}`);
+      await syncCourseSubmissions(courseConfig.id);
+    }
+    
+    const duration = Date.now() - startTime;
+    console.log(`All courses synced successfully in ${duration}ms`);
+    
+    return {
+      success: true,
+      message: `Synced ${COURSES_CONFIG.length} courses in ${duration}ms`
+    };
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    console.error('Error syncing courses:', error);
+    
+    return {
+      success: false,
+      message: `Sync failed after ${duration}ms: ${error instanceof Error ? error.message : 'Unknown error'}`
+    };
   }
 }

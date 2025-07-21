@@ -1,5 +1,5 @@
 import { Elysia } from 'elysia';
-import { syncCourseSubmissions } from '../services/sync.js';
+import { syncCourseSubmissions, syncAllCourses } from '../services/sync.js';
 
 export const syncRoutes = new Elysia({ prefix: '/api/sync' })
   .post('/', async ({ body }: { body: any }) => {
@@ -99,6 +99,35 @@ export const syncRoutes = new Elysia({ prefix: '/api/sync' })
       console.error('Error getting default sync status:', error);
       return { 
         error: 'Failed to get sync status',
+        status: 500 
+      };
+    }
+  })
+  .post('/all', async ({ body }: { body: any }) => {
+    try {
+      const { password } = body;
+
+      // Check sync password
+      if (password !== process.env.SYNC_PASSWORD) {
+        return { 
+          error: 'Unauthorized',
+          status: 401 
+        };
+      }
+
+      console.log('Manual sync requested for all courses');
+      
+      const result = await syncAllCourses();
+      
+      return { 
+        message: result.message,
+        success: result.success,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('Sync error:', error);
+      return { 
+        error: 'Sync failed: ' + (error instanceof Error ? error.message : 'Unknown error'),
         status: 500 
       };
     }
