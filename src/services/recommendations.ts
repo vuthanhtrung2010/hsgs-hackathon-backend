@@ -66,13 +66,120 @@ export async function getRecommendationsForUser(
     quizId: question.quizId,
     quizName: question.quizName,
     cluster: cluster,
-    estimatedDifficulty: Math.round(question.rating)
+    rating: Math.round(question.rating)
   }));
 }
 
 /**
- * Get recommendations for all clusters for a user
+ * Get balanced recommendations across multiple clusters for a user
+ * Returns 3-5 total recommendations with good variety from ALL clusters
  */
+export async function getBalancedRecommendationsForUser(
+  studentId: string,
+  courseId: string,
+  totalCount: number = 4
+): Promise<Recommendations[]> {
+  // Get user's ratings across all clusters
+  const users = await db.user.findMany({
+    where: {
+      studentId,
+      courseId
+    },
+    include: {
+      quizzes: {
+        include: {
+          question: true
+        }
+      }
+    }
+  });
+
+  // Get solved quiz IDs across all clusters
+  const solvedQuizIds = users.flatMap((user: any) => 
+    user.quizzes.map((q: any) => q.question.quizId)
+  );
+
+  // Get user ratings by cluster (default to 1500 for new clusters)
+  const userRatingsByCluster: Record<string, number> = {};
+  for (const user of users) {
+    userRatingsByCluster[user.cluster] = user.rating;
+  }
+
+  const allRecommendations: (Recommendations & { priority: number })[] = [];
+
+  // Get recommendations from ALL clusters (not just where user has participated)
+  for (const cluster of CLUSTER_NAMES) {
+    const userRating = userRatingsByCluster[cluster] || 1500; // Default rating for new clusters
+
+    // Find unsolved problems in this cluster
+    const unsolvedQuestions = await db.question.findMany({
+      where: {
+        courseId,
+        cluster,
+        quizId: {
+          notIn: solvedQuizIds
+        }
+      },
+      take: 10 // Get more for better selection
+    });
+
+    // Prioritize problems based on rating difference
+    for (const question of unsolvedQuestions) {
+      // For clusters user hasn't tried, recommend easier problems (user rating - 50)
+      // For clusters user has tried, recommend slightly harder problems (user rating + 50)
+      const hasParticipated = userRatingsByCluster[cluster] !== undefined;
+      const targetRating = hasParticipated ? userRating + 50 : userRating - 50;
+      const ratingDiff = Math.abs(question.rating - targetRating);
+      
+      // Give bonus priority to new clusters to encourage exploration
+      const explorationBonus = hasParticipated ? 0 : 100;
+      const priority = 1000 - ratingDiff + explorationBonus;
+
+      allRecommendations.push({
+        quizId: question.quizId,
+        quizName: question.quizName,
+        cluster: cluster as ClusterType,
+        rating: Math.round(question.rating),
+        priority
+      });
+    }
+  }
+
+  // Sort by priority and take diverse recommendations
+  const sortedRecs = allRecommendations.sort((a, b) => b.priority - a.priority);
+  const finalRecommendations: Recommendations[] = [];
+  const usedClusters = new Set<string>();
+
+  // First pass: get one from each cluster (prioritizing new clusters)
+  for (const rec of sortedRecs) {
+    if (!usedClusters.has(rec.cluster) && finalRecommendations.length < totalCount) {
+      finalRecommendations.push({
+        quizId: rec.quizId,
+        quizName: rec.quizName,
+        cluster: rec.cluster,
+        rating: rec.rating
+      });
+      usedClusters.add(rec.cluster);
+    }
+  }
+
+  // Second pass: fill remaining slots with best recommendations
+  for (const rec of sortedRecs) {
+    if (finalRecommendations.length >= totalCount) break;
+    
+    const alreadyIncluded = finalRecommendations.some(r => r.quizId === rec.quizId);
+    if (!alreadyIncluded) {
+      finalRecommendations.push({
+        quizId: rec.quizId,
+        quizName: rec.quizName,
+        cluster: rec.cluster,
+        rating: rec.rating
+      });
+    }
+  }
+
+  return finalRecommendations;
+}
 export async function getAllRecommendationsForUser(
   studentId: string,
   courseId: string,

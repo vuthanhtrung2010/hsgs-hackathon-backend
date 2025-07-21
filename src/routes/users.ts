@@ -1,7 +1,7 @@
 import { Elysia } from 'elysia';
 import { db } from '../db.js';
 import { fetchUserAvatar } from '../utils/canvas.js';
-import { getAllRecommendationsForUser } from '../services/recommendations.js';
+import { getBalancedRecommendationsForUser } from '../services/recommendations.js';
 import { CLUSTER_NAMES, type IUserData, type IUsersListData, type Course, type Clusters } from '../types.js';
 
 export const userRoutes = new Elysia({ prefix: '/api/users' })
@@ -66,8 +66,9 @@ export const userRoutes = new Elysia({ prefix: '/api/users' })
       // Get recommendations for the primary course (first one)
       const primaryCourse = Object.values(courseData)[0];
       if (primaryCourse) {
-        const recommendations = await getAllRecommendationsForUser(userId, primaryCourse.courseId);
-        primaryCourse.recommendations = Object.values(recommendations).flat();
+        // Get 4-5 balanced recommendations across different clusters
+        const recommendations = await getBalancedRecommendationsForUser(userId, primaryCourse.courseId, 4);
+        primaryCourse.recommendations = recommendations;
       }
 
       // Fill missing clusters with null

@@ -14,7 +14,7 @@ export interface Recommendations {
   quizId: string;
   quizName: string;
   cluster: ClusterType;
-  estimatedDifficulty: number;
+  rating: number;
 }
 
 export interface Course {
