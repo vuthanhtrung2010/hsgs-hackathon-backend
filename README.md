@@ -80,9 +80,8 @@ The server will start on `http://localhost:3000`
 
 ### Users
 - `GET /api/users/details/:userId` - Get detailed user information with recommendations
-- `GET /api/users/list` - Get list of all users
 
-### Rankings
+### Rankings (act as user lists returning)
 - `GET /api/ranking/:courseId` - Get ranking for specific course
 - `GET /api/ranking` - Get ranking for default course
 
