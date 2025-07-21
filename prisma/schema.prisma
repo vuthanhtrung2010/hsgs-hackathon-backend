@@ -1,0 +1,86 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ma/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         Int      @id @default(autoincrement())
+  studentId  String   // Canvas user ID
+  name       String
+  shortName  String
+  courseId   String   // Canvas course ID
+  rating     Float    @default(1500)
+  cluster    String   // ART, BUSINESS, etc.
+  quizzes    Quiz[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([studentId, courseId, cluster])
+  @@index([courseId, cluster])
+  @@index([studentId])
+  @@map("users")
+}
+
+model Question {
+  id              Int      @id @default(autoincrement())
+  quizId          String   // Canvas quiz ID
+  quizName        String
+  courseId        String   // Canvas course ID
+  cluster         String
+  rating          Float    @default(1500)
+  submissionCount Int      @default(0)
+  quizzes         Quiz[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([quizId, courseId])
+  @@index([courseId, cluster])
+  @@index([quizId])
+  @@map("questions")
+}
+
+model Quiz {
+  id             Int      @id @default(autoincrement())
+  userId         Int
+  questionId     Int
+  score          Float
+  maxScore       Float
+  submittedAt    DateTime
+  ratingChange   Float    @default(0)
+  createdAt      DateTime @default(now())
+  
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question       Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, questionId])
+  @@index([userId])
+  @@index([questionId])
+  @@map("quizzes")
+}
+
+model Course {
+  id         String   @id  // Canvas course ID
+  name       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("courses")
+}
+
+model SyncHistory {
+  id        Int      @id @default(autoincrement())
+  courseId  String   // Canvas course ID
+  lastSync  DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([courseId])
+  @@map("sync_history")
+}
