@@ -26,7 +26,11 @@ export const problemRoutes = new Elysia({ prefix: '/api/problems' })
         course: {
           courseId: question.courseId,
         },
-        type: [question.cluster], // Map cluster to problem type
+        type: [
+          question.cluster
+            ? question.cluster.charAt(0).toUpperCase() + question.cluster.slice(1).toLowerCase()
+            : question.cluster
+        ], // Map cluster to problem type with first char uppercased
         rating: Math.round(question.rating)
       }));
 
