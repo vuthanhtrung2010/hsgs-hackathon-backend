@@ -4,6 +4,7 @@ import { rankingRoutes } from './src/routes/ranking.js';
 import { syncRoutes } from './src/routes/sync.js';
 import { healthRoutes } from './src/routes/health.js';
 import { courseRoutes } from './src/routes/courses.js';
+import { problemRoutes } from './src/routes/problems.js';
 import { startCronJobs, stopCronJobs } from './src/services/cron.js';
 
 const app = new Elysia()
@@ -24,6 +25,7 @@ const app = new Elysia()
   
   // API routes
   .use(courseRoutes)
+  .use(problemRoutes)
   .use(userRoutes)
   .use(rankingRoutes)
   .use(syncRoutes)
@@ -36,6 +38,7 @@ const app = new Elysia()
     endpoints: {
       health: '/api/health',
       courses: '/api/courses',
+      problems: '/api/problems',
       users: {
         details: '/api/users/details/:userId',
         list: '/api/users/list'
