@@ -1,5 +1,6 @@
 import { Elysia } from 'elysia';
 import { syncCourseSubmissions, syncAllCourses } from '../services/sync.js';
+import { env } from '../env.js';
 
 export const syncRoutes = new Elysia({ prefix: '/api/sync' })
   .post('/', async ({ body }: { body: any }) => {
@@ -7,14 +8,14 @@ export const syncRoutes = new Elysia({ prefix: '/api/sync' })
       const { password, courseId } = body;
 
       // Check sync password
-      if (password !== process.env.SYNC_PASSWORD) {
+      if (password !== env.SYNC_PASSWORD) {
         return { 
           error: 'Unauthorized',
           status: 401 
         };
       }
 
-      const targetCourseId = courseId || process.env.COURSE_ID;
+      const targetCourseId = courseId || env.COURSE_ID;
       
       if (!targetCourseId) {
         return { 
@@ -72,7 +73,7 @@ export const syncRoutes = new Elysia({ prefix: '/api/sync' })
 
   .get('/status', async () => {
     try {
-      const defaultCourseId = process.env.COURSE_ID;
+      const defaultCourseId = env.COURSE_ID;
       
       if (!defaultCourseId) {
         return { error: 'No default course ID configured' };
@@ -108,7 +109,7 @@ export const syncRoutes = new Elysia({ prefix: '/api/sync' })
       const { password } = body;
 
       // Check sync password
-      if (password !== process.env.SYNC_PASSWORD) {
+      if (password !== env.SYNC_PASSWORD) {
         return { 
           error: 'Unauthorized',
           status: 401 

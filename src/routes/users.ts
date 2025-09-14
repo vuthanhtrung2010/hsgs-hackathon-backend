@@ -8,7 +8,7 @@ export const userRoutes = new Elysia({ prefix: '/api/users' })
   .get('/details/:userId', async ({ params: { userId } }) => {
     try {
       // Get user data across all courses and clusters
-      const users = await db.user.findMany({
+      const users = await db.canvasUser.findMany({
         where: { studentId: userId },
         include: {
           quizzes: {

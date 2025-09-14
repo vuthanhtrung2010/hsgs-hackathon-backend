@@ -11,7 +11,7 @@ export async function getRecommendationsForUser(
   count: number = 3
 ): Promise<Recommendations[]> {
   // Get user's current rating in this cluster
-  const user = await db.user.findUnique({
+  const user = await db.canvasUser.findUnique({
     where: {
       studentId_courseId_cluster: {
         studentId,
@@ -80,7 +80,7 @@ export async function getBalancedRecommendationsForUser(
   totalCount: number = 4
 ): Promise<Recommendations[]> {
   // Get user's ratings across all clusters
-  const users = await db.user.findMany({
+  const users = await db.canvasUser.findMany({
     where: {
       studentId,
       courseId

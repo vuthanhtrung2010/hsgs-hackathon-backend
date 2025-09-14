@@ -1,7 +1,8 @@
 import type { CanvasQuiz, CanvasSubmission } from '../types.js';
+import { env } from '../env.js';
 
-const CANVAS_API_BASE_URL = process.env.CANVAS_API_BASE_URL!;
-const CANVAS_API_KEY = process.env.CANVAS_API_KEY!;
+const CANVAS_API_BASE_URL = env.CANVAS_BASE_URL;
+const CANVAS_API_KEY = env.CANVAS_ACCESS_TOKEN;;
 
 const headers = {
   'Authorization': `Bearer ${CANVAS_API_KEY}`,

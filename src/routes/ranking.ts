@@ -5,7 +5,7 @@ export const rankingRoutes = new Elysia({ prefix: '/api/ranking' })
   .get('/:courseId', async ({ params: { courseId } }) => {
     try {
       // Get all users for the specified course
-      const users = await db.user.findMany({
+      const users = await db.canvasUser.findMany({
         where: { courseId },
         select: {
           studentId: true,
@@ -81,7 +81,7 @@ export const rankingRoutes = new Elysia({ prefix: '/api/ranking' })
       }
 
       // Get all users for the default course
-      const users = await db.user.findMany({
+      const users = await db.canvasUser.findMany({
         where: { courseId: defaultCourseId },
         select: {
           studentId: true,

@@ -10,17 +10,17 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id         Int      @id @default(autoincrement())
-  studentId  String   // Canvas user ID
-  name       String
-  shortName  String
-  courseId   String   // Canvas course ID
-  rating     Float    @default(1500)
-  cluster    String   // ART, BUSINESS, etc.
-  quizzes    Quiz[]
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+model CanvasUser {
+  id        Int      @id @default(autoincrement())
+  studentId String // Canvas user ID
+  name      String
+  shortName String
+  courseId  String // Canvas course ID
+  rating    Float    @default(1500)
+  cluster   String // ART, BUSINESS, etc.
+  quizzes   Quiz[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([studentId, courseId, cluster])
   @@index([courseId, cluster])
@@ -30,9 +30,9 @@ model User {
 
 model Question {
   id              Int      @id @default(autoincrement())
-  quizId          String   // Canvas quiz ID
+  quizId          String // Canvas quiz ID
   quizName        String
-  courseId        String   // Canvas course ID
+  courseId        String // Canvas course ID
   cluster         String
   rating          Float    @default(1500)
   submissionCount Int      @default(0)
@@ -47,17 +47,17 @@ model Question {
 }
 
 model Quiz {
-  id             Int      @id @default(autoincrement())
-  userId         Int
-  questionId     Int
-  score          Float
-  maxScore       Float
-  submittedAt    DateTime
-  ratingChange   Float    @default(0)
-  createdAt      DateTime @default(now())
-  
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  question       Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  questionId   Int
+  score        Float
+  maxScore     Float
+  submittedAt  DateTime
+  ratingChange Float    @default(0)
+  createdAt    DateTime @default(now())
+
+  user     CanvasUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@unique([userId, questionId])
   @@index([userId])
@@ -66,21 +66,81 @@ model Quiz {
 }
 
 model Course {
-  id         String   @id  // Canvas course ID
-  name       String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id // Canvas course ID
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("courses")
 }
 
 model SyncHistory {
   id        Int      @id @default(autoincrement())
-  courseId  String   // Canvas course ID
+  courseId  String // Canvas course ID
   lastSync  DateTime
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([courseId])
   @@map("sync_history")
+}
+
+model User {
+  id            String    @id
+  name          String
+  email         String
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now()) @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  @@map("verification")
 }

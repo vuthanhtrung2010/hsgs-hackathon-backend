@@ -13,11 +13,14 @@
     "db:studio": "bunx prisma studio"
   },
   "dependencies": {
-    "elysia": "latest",
+    "@elysiajs/cors": "^1.4.0",
     "@prisma/client": "latest",
-    "prisma": "latest",
+    "@types/node-cron": "^3.0.11",
+    "better-auth": "^1.3.9",
+    "elysia": "latest",
     "node-cron": "^3.0.3",
-    "@types/node-cron": "^3.0.11"
+    "prisma": "latest",
+    "zod": "^4.1.8"
   },
   "devDependencies": {
     "@types/bun": "latest",

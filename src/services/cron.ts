@@ -1,34 +1,66 @@
 import * as cron from 'node-cron';
-import { syncCourseSubmissions } from './sync.js';
+import { syncCourseSubmissions, syncAllCourses } from './sync.js';
+import { COURSES_CONFIG } from '../config.js';
+import { env } from '../env.js';
 
 /**
- * Start the cron job for automatic syncing
+ * Start the cron job for automatic syncing and do initial sync
  */
-export function startCronJobs(): void {
-  const cronInterval = process.env.CRON_INTERVAL || '*/45 * * * *'; // Default: every 45 minutes
-  const courseId = process.env.COURSE_ID;
+export async function startCronJobs(): Promise<void> {
+  const cronInterval = env.CRON_INTERVAL;
+  const courseId = env.COURSE_ID;
 
-  if (!courseId) {
-    console.warn('COURSE_ID not set, cron jobs will not start');
-    return;
+  console.log('🚀 Starting initial full sync on server startup...');
+  
+  // Do initial full sync on startup
+  try {
+    if (courseId) {
+      console.log(`🔄 Syncing specific course: ${courseId}...`);
+      await syncCourseSubmissions(courseId);
+    } else {
+      console.log(`🔄 Syncing all configured courses (${COURSES_CONFIG.length} courses)...`);
+      const result = await syncAllCourses();
+      console.log(`📊 Sync result: ${result.message}`);
+    }
+    console.log('✅ Initial sync completed successfully');
+  } catch (error) {
+    console.error('❌ Initial sync failed:', error);
   }
 
-  console.log(`Starting cron job with interval: ${cronInterval} for course: ${courseId}`);
+  // Set up cron job
+  if (courseId) {
+    console.log(`📅 Setting up cron job with interval: ${cronInterval} for course: ${courseId}`);
 
-  cron.schedule(cronInterval, async () => {
-    try {
-      console.log('Cron job started - syncing submissions...');
-      await syncCourseSubmissions(courseId);
-      console.log('Cron job completed successfully');
-    } catch (error) {
-      console.error('Cron job failed:', error);
-    }
-  }, {
-    scheduled: true,
-    timezone: 'UTC'
-  });
+    cron.schedule(cronInterval, async () => {
+      try {
+        console.log('⏰ Cron job started - syncing submissions...');
+        await syncCourseSubmissions(courseId);
+        console.log('✅ Cron job completed successfully');
+      } catch (error) {
+        console.error('❌ Cron job failed:', error);
+      }
+    }, {
+      scheduled: true,
+      timezone: 'UTC'
+    });
+  } else {
+    console.log(`📅 Setting up cron job with interval: ${cronInterval} for all configured courses`);
 
-  console.log('Cron jobs initialized');
+    cron.schedule(cronInterval, async () => {
+      try {
+        console.log('⏰ Cron job started - syncing all courses...');
+        const result = await syncAllCourses();
+        console.log(`✅ Cron job completed: ${result.message}`);
+      } catch (error) {
+        console.error('❌ Cron job failed:', error);
+      }
+    }, {
+      scheduled: true,
+      timezone: 'UTC'
+    });
+  }
+
+  console.log('🕒 Cron jobs initialized');
 }
 
 /**

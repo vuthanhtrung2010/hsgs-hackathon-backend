@@ -3,6 +3,7 @@ import { fetchAllQuizzes, fetchAllUpdatedSubmissions, fetchUserProfile } from '.
 import { parseCluster } from '../utils/parseCluster.js';
 import { updateRatings } from '../utils/elo.js';
 import { COURSES_CONFIG } from '../config.js';
+import { env } from '../env.js';
 import type { CanvasSubmission } from '../types.js';
 
 const CONCURRENCY_LIMIT = 5; // Maximum concurrent operations
@@ -14,9 +15,9 @@ const userProfileCache = new Map<string, any>();
 async function syncCourseInfo(courseId: string) {
   try {
     // Fetch course info from Canvas API
-    const response = await fetch(`${process.env.CANVAS_BASE_URL}/courses/${courseId}`, {
+    const response = await fetch(`${env.CANVAS_BASE_URL}/api/v1/courses/${courseId}`, {
       headers: {
-        'Authorization': `Bearer ${process.env.CANVAS_ACCESS_TOKEN}`
+        'Authorization': `Bearer ${env.CANVAS_ACCESS_TOKEN}`
       }
     });
     
@@ -209,7 +210,7 @@ async function processSubmission(
   // Use transaction for better performance and data consistency
   const result = await db.$transaction(async (tx) => {
     // Find or create user
-    let user = await tx.user.findUnique({
+    let user = await tx.canvasUser.findUnique({
       where: {
         studentId_courseId_cluster: {
           studentId,
@@ -232,7 +233,7 @@ async function processSubmission(
       // Fetch user profile from Canvas (with caching)
       const profile = await getCachedUserProfile(studentId);
       
-      user = await tx.user.create({
+      user = await tx.canvasUser.create({
         data: {
           studentId,
           courseId,
@@ -251,8 +252,8 @@ async function processSubmission(
       });
     }
 
-    // Check if user already completed this quiz
-    const existingQuiz = user.quizzes.find((q: any) => q.question.quizId === quizId);
+    // Check if user has already taken this quiz
+    const existingQuiz = user!.quizzes.find((q: any) => q.question.quizId === quizId);
     if (existingQuiz) {
       console.log(`User ${studentId} already completed quiz ${quizId}`);
       return null;
@@ -284,23 +285,23 @@ async function processSubmission(
 
     // Calculate new ratings
     const userScore = submission.score! / submission.quiz_points_possible!;
-    const userProblemsInCluster = user.quizzes.filter((q: any) => q.question.cluster === cluster).length;
+    const userProblemsInCluster = user!.quizzes.filter((q: any) => q.question.cluster === cluster).length;
     
     const { newUserRating, newQuestionRating, ratingChange } = updateRatings(
-      user.rating,
+      user!.rating,
       question.rating,
       userScore,
       userProblemsInCluster,
       question.submissionCount
     );
 
-    console.log(`Rating change for user ${studentId}: ${user.rating} -> ${newUserRating} (${ratingChange >= 0 ? '+' : ''}${ratingChange.toFixed(2)})`);
+    console.log(`Rating change for user ${studentId}: ${user!.rating} -> ${newUserRating} (${ratingChange >= 0 ? '+' : ''}${ratingChange.toFixed(2)})`);
     console.log(`Rating change for question ${quizId}: ${question.rating} -> ${newQuestionRating}`);
 
     // Update user rating, question rating, and create quiz record in parallel
     await Promise.all([
-      tx.user.update({
-        where: { id: user.id },
+      tx.canvasUser.update({
+        where: { id: user!.id },
         data: { rating: newUserRating }
       }),
       tx.question.update({
@@ -312,7 +313,7 @@ async function processSubmission(
       }),
       tx.quiz.create({
         data: {
-          userId: user.id,
+          userId: user!.id,
           questionId: question.id,
           score: submission.score!,
           maxScore: submission.quiz_points_possible!,

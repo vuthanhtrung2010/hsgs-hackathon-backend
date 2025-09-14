@@ -1,4 +1,5 @@
 import { Elysia } from 'elysia';
+import { cors } from '@elysiajs/cors';
 import { userRoutes } from './src/routes/users.js';
 import { rankingRoutes } from './src/routes/ranking.js';
 import { syncRoutes } from './src/routes/sync.js';
@@ -6,16 +7,22 @@ import { healthRoutes } from './src/routes/health.js';
 import { courseRoutes } from './src/routes/courses.js';
 import { problemRoutes } from './src/routes/problems.js';
 import { startCronJobs, stopCronJobs } from './src/services/cron.js';
+import { auth } from './src/auth.js';
+import { env } from './src/env.js';
 
 const app = new Elysia()
   // CORS middleware
-  .use(async (app) => 
-    app.onRequest(({ set }) => {
-      set.headers['Access-Control-Allow-Origin'] = '*';
-      set.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS';
-      set.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization';
+  .use(
+    cors({
+      origin: env.NODE_ENV === 'production' ? 'https://your-frontend-domain.com' : 'http://localhost:5173',
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      credentials: true,
+      allowedHeaders: ['Content-Type', 'Authorization'],
     })
   )
+  
+  // Better Auth handler
+  .mount(auth.handler)
   
   // Handle preflight requests
   .options('*', () => new Response(null, { status: 200 }))
@@ -76,12 +83,16 @@ const app = new Elysia()
   })
   
   // Start server
-  .listen(process.env.PORT || 3000);
+  .listen(env.PORT);
 
 console.log(`🚀 Server is running at http://localhost:${app.server?.port}`);
 
-// Start cron jobs
-startCronJobs();
+// Start cron jobs with initial sync
+startCronJobs().then(() => {
+  console.log('🎯 Server fully initialized with sync jobs');
+}).catch((error) => {
+  console.error('❌ Failed to start cron jobs:', error);
+});
 
 // Graceful shutdown
 process.on('SIGINT', () => {
