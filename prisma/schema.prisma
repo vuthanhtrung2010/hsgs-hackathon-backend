@@ -74,6 +74,16 @@ model Course {
   @@map("courses")
 }
 
+model Class {
+  id        String   @id @default(cuid())
+  name      String
+  students  String[] // Array of student names
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("classes")
+}
+
 model SyncHistory {
   id        Int      @id @default(autoincrement())
   courseId  String // Canvas course ID
