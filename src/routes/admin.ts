@@ -7,12 +7,13 @@ export const adminRoutes = new Elysia({ prefix: '/api/admin' })
   // Get dashboard stats
   .get('/stats', async () => {
     try {
-      const [classCount, totalStudents, canvasUserCount] = await Promise.all([
+      const [classCount, totalStudents, canvasUserCount, announcementCount] = await Promise.all([
         db.class.count(),
         db.class.findMany().then(classes => 
           classes.reduce((total, cls) => total + cls.students.length, 0)
         ),
-        db.canvasUser.count()
+        db.canvasUser.count(),
+        db.announcement.count()
       ]);
 
       return {
@@ -21,6 +22,7 @@ export const adminRoutes = new Elysia({ prefix: '/api/admin' })
           classCount,
           totalStudents,
           canvasUserCount,
+          announcementCount,
         }
       };
     } catch (error) {
@@ -181,6 +183,141 @@ export const adminRoutes = new Elysia({ prefix: '/api/admin' })
       return {
         success: false,
         error: 'Failed to update class'
+      };
+    }
+  })
+
+  // Announcement routes
+  // Get all announcements
+  .get('/announcements', async () => {
+    try {
+      const announcements = await db.announcement.findMany({
+        orderBy: {
+          createdAt: 'desc'
+        }
+      });
+
+      return {
+        success: true,
+        announcements
+      };
+    } catch (error) {
+      console.error('Error fetching announcements:', error);
+      return {
+        success: false,
+        error: 'Failed to fetch announcements'
+      };
+    }
+  })
+
+  // Create announcement
+  .post('/announcements', async ({ body }: { body: any }) => {
+    try {
+      const { title } = body;
+
+      if (!title || !title.trim()) {
+        return {
+          success: false,
+          error: 'Title is required'
+        };
+      }
+
+      const newAnnouncement = await db.announcement.create({
+        data: {
+          title: title.trim(),
+          content: ''
+        }
+      });
+
+      return {
+        success: true,
+        announcement: newAnnouncement
+      };
+    } catch (error) {
+      console.error('Error creating announcement:', error);
+      return {
+        success: false,
+        error: 'Failed to create announcement'
+      };
+    }
+  })
+
+  // Get single announcement
+  .get('/announcements/:id', async ({ params }: { params: { id: string } }) => {
+    try {
+      const announcement = await db.announcement.findUnique({
+        where: { id: params.id }
+      });
+
+      if (!announcement) {
+        return {
+          success: false,
+          error: 'Announcement not found'
+        };
+      }
+
+      return {
+        success: true,
+        announcement
+      };
+    } catch (error) {
+      console.error('Error fetching announcement:', error);
+      return {
+        success: false,
+        error: 'Failed to fetch announcement'
+      };
+    }
+  })
+
+  // Update announcement
+  .put('/announcements/:id', async ({ params, body }: { params: { id: string }, body: any }) => {
+    try {
+      const { title, content } = body;
+
+      if (!title || !title.trim()) {
+        return {
+          success: false,
+          error: 'Title is required'
+        };
+      }
+
+      const updatedAnnouncement = await db.announcement.update({
+        where: { id: params.id },
+        data: {
+          title: title.trim(),
+          content: content || ''
+        }
+      });
+
+      return {
+        success: true,
+        announcement: updatedAnnouncement
+      };
+    } catch (error) {
+      console.error('Error updating announcement:', error);
+      return {
+        success: false,
+        error: 'Failed to update announcement'
+      };
+    }
+  })
+
+  // Delete announcement
+  .delete('/announcements/:id', async ({ params }: { params: { id: string } }) => {
+    try {
+      await db.announcement.delete({
+        where: { id: params.id }
+      });
+
+      return {
+        success: true,
+        message: 'Announcement deleted successfully'
+      };
+    } catch (error) {
+      console.error('Error deleting announcement:', error);
+      return {
+        success: false,
+        error: 'Failed to delete announcement'
       };
     }
   });

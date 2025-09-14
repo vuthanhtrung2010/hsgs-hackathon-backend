@@ -66,3 +66,19 @@ export interface CanvasSubmission {
   quiz_points_possible: number | null;
   updated_at: string;
 }
+
+export interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Class {
+  id: string;
+  name: string;
+  students: string[];
+  createdAt: Date;
+  updatedAt: Date;
+}

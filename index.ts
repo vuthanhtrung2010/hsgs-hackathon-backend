@@ -7,6 +7,7 @@ import { healthRoutes } from './src/routes/health.js';
 import { courseRoutes } from './src/routes/courses.js';
 import { problemRoutes } from './src/routes/problems.js';
 import { adminRoutes } from './src/routes/admin.js';
+import { announcementRoutes } from './src/routes/announcements.js';
 import { startCronJobs, stopCronJobs } from './src/services/cron.js';
 import { auth } from './src/auth.js';
 import { env } from './src/env.js';
@@ -37,6 +38,7 @@ const app = new Elysia()
   .use(userRoutes)
   .use(rankingRoutes)
   .use(syncRoutes)
+  .use(announcementRoutes)
   .use(adminRoutes)
   
   // Root endpoint
