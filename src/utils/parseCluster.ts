@@ -27,8 +27,18 @@ export function parseCluster(quizName: string): ParsedQuiz | null {
   const types = typesMatch.map(type => type.slice(1, -1).trim()); // Remove brackets and trim
 
   // Match the rest of the pattern: lesson name <<difficulty>> (class)
-  const contentPattern = /](.+?)\s*<(\d+(?:\.\d+)?)>\s*\((\d+)\)/i;
-  const contentMatch = quizName.match(contentPattern);
+  // Find the position after all consecutive bracketed types
+  const bracketPattern = /\[([^\]]+)\]\s*/g;
+  let match;
+  let lastBracketEnd = 0;
+  while ((match = bracketPattern.exec(quizName)) !== null) {
+    lastBracketEnd = match.index + match[0].length;
+  }
+  
+  const remainingText = quizName.slice(lastBracketEnd).trim();
+  
+  const contentPattern = /^(.+?)\s*<(\d+(?:\.\d+)?)>\s*\((\d+)\)/i;
+  const contentMatch = remainingText.match(contentPattern);
 
   if (!contentMatch || contentMatch.length < 4) {
     console.log(`Skipping quiz "${quizName}" - does not match required format for lesson, difficulty, and class`);
