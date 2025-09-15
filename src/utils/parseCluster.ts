@@ -1,20 +1,67 @@
-import { CLUSTER_NAMES, type ClusterType } from '../types.js';
+/**
+ * Parsed quiz information from title
+ */
+export interface ParsedQuiz {
+  types: string[];     // Array of types/categories from the title
+  lesson: string;      // Tên bài (Lesson name)
+  difficulty: number;  // Độ khó (Difficulty)
+  class: number;       // Lớp (Class/Grade)
+}
 
 /**
- * Parse cluster name from quiz title
+ * Parse quiz title with format: [<Loại>] <Tên bài> <<Độ khó>> (Lớp)
+ * Can have multiple [<Loại>] parts for multiple types
+ * Example: [Math] [Science] [Giải tích] Giải tích 1 <8.5> (12)
+ *
  * @param quizName - The quiz title from Canvas
- * @returns Cluster name if found, null otherwise
+ * @returns Parsed quiz info if all components found, null otherwise
  */
-export function parseCluster(quizName: string): ClusterType | null {
-  // Match pattern like [READING][ART 1] or [LISTENING] [BUSINESS 2] etc.
-  const match = quizName.match(/(?:\[\s*(?:READING|LISTENING)\s*\])?\s*\[?\s*([A-Z &]+)\s*\d*\]?/i);
-  
-  if (!match || !match[1]) return null;
-  
-  const extractedCluster = match[1].trim().toUpperCase();
-  
-  // Find matching cluster name
-  return CLUSTER_NAMES.find(cluster => 
-    cluster.toUpperCase() === extractedCluster
-  ) as ClusterType || null;
+export function parseCluster(quizName: string): ParsedQuiz | null {
+  // Extract all types from the brackets first
+  const typesMatch = quizName.match(/\[([^\]]+)\]/g);
+  if (!typesMatch || typesMatch.length === 0) {
+    console.log(`Skipping quiz "${quizName}" - no types found in brackets`);
+    return null;
+  }
+
+  const types = typesMatch.map(type => type.slice(1, -1).trim()); // Remove brackets and trim
+
+  // Match the rest of the pattern: lesson name <<difficulty>> (class)
+  const contentPattern = /](.+?)\s*<(\d+(?:\.\d+)?)>\s*\((\d+)\)/i;
+  const contentMatch = quizName.match(contentPattern);
+
+  if (!contentMatch || contentMatch.length < 4) {
+    console.log(`Skipping quiz "${quizName}" - does not match required format for lesson, difficulty, and class`);
+    return null;
+  }
+
+  const lesson = contentMatch[1]?.trim();
+  const difficultyStr = contentMatch[2];
+  const classStr = contentMatch[3];
+
+  if (!lesson || !difficultyStr || !classStr) {
+    console.log(`Skipping quiz "${quizName}" - missing required components`);
+    return null;
+  }
+
+  // Validate difficulty is a number
+  const difficulty = parseFloat(difficultyStr);
+  if (isNaN(difficulty)) {
+    console.log(`Skipping quiz "${quizName}" - invalid difficulty: ${difficultyStr}`);
+    return null;
+  }
+
+  // Validate class is a number
+  const classNum = parseInt(classStr, 10);
+  if (isNaN(classNum)) {
+    console.log(`Skipping quiz "${quizName}" - invalid class: ${classStr}`);
+    return null;
+  }
+
+  return {
+    types,
+    lesson,
+    difficulty,
+    class: classNum
+  };
 }

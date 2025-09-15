@@ -15,7 +15,7 @@ export const syncRoutes = new Elysia({ prefix: '/api/sync' })
         };
       }
 
-      const targetCourseId = courseId || env.COURSE_ID;
+      const targetCourseId = courseId;
       
       if (!targetCourseId) {
         return { 
@@ -71,39 +71,6 @@ export const syncRoutes = new Elysia({ prefix: '/api/sync' })
     }
   })
 
-  .get('/status', async () => {
-    try {
-      const defaultCourseId = env.COURSE_ID;
-      
-      if (!defaultCourseId) {
-        return { error: 'No default course ID configured' };
-      }
-
-      const syncHistory = await import('../db.js').then(m => m.db.syncHistory.findUnique({
-        where: { courseId: defaultCourseId }
-      }));
-
-      if (!syncHistory) {
-        return {
-          courseId: defaultCourseId,
-          lastSync: null,
-          status: 'Never synced'
-        };
-      }
-
-      return {
-        courseId: defaultCourseId,
-        lastSync: syncHistory.lastSync.toISOString(),
-        status: 'Synced'
-      };
-    } catch (error) {
-      console.error('Error getting default sync status:', error);
-      return { 
-        error: 'Failed to get sync status',
-        status: 500 
-      };
-    }
-  })
   .post('/all', async ({ body }: { body: any }) => {
     try {
       const { password } = body;

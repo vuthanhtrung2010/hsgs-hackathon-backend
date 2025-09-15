@@ -17,13 +17,12 @@ model CanvasUser {
   shortName String
   courseId  String // Canvas course ID
   rating    Float    @default(1500)
-  cluster   String // ART, BUSINESS, etc.
   quizzes   Quiz[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([studentId, courseId, cluster])
-  @@index([courseId, cluster])
+  @@unique([studentId, courseId])
+  @@index([courseId])
   @@index([studentId])
   @@map("users")
 }
@@ -33,7 +32,10 @@ model Question {
   quizId          String // Canvas quiz ID
   quizName        String
   courseId        String // Canvas course ID
-  cluster         String
+  types           String[] // Array of quiz types (e.g., ["Bài tập", "Kiểm tra"])
+  lesson          String? // Lesson name
+  difficulty      Float?  // Difficulty level
+  class           Int?    // Class number
   rating          Float    @default(1500)
   submissionCount Int      @default(0)
   quizzes         Quiz[]
@@ -41,7 +43,7 @@ model Question {
   updatedAt       DateTime @updatedAt
 
   @@unique([quizId, courseId])
-  @@index([courseId, cluster])
+  @@index([courseId])
   @@index([quizId])
   @@map("questions")
 }

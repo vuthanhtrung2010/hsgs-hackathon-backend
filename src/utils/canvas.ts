@@ -10,6 +10,39 @@ const headers = {
 };
 
 /**
+ * Fetch all active courses for the current user
+ */
+export async function fetchAllCourses(): Promise<Array<{ id: string; name: string; course_code: string }>> {
+  let page = 1;
+  let allCourses: Array<{ id: string; name: string; course_code: string }> = [];
+
+  while (true) {
+    const url = `${CANVAS_API_BASE_URL}/api/v1/courses?per_page=100&page=${page}&enrollment_state=active`;
+    
+    const response = await fetch(url, { headers });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch courses: ${response.statusText}`);
+    }
+
+    const courses = await response.json() as Array<{ id: number; name: string; course_code: string }>;
+    // Convert id to string to match our database schema
+    const formattedCourses = courses.map(course => ({
+      id: course.id.toString(),
+      name: course.name,
+      course_code: course.course_code
+    }));
+    allCourses = allCourses.concat(formattedCourses);
+
+    const linkHeader = response.headers.get('link');
+    if (!linkHeader || !linkHeader.includes('rel="next"')) break;
+    page++;
+  }
+
+  return allCourses;
+}
+
+/**
  * Fetch all quizzes for a course with pagination
  */
 export async function fetchAllQuizzes(courseId: string): Promise<CanvasQuiz[]> {

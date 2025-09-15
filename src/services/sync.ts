@@ -1,8 +1,7 @@
 import { db } from '../db.js';
-import { fetchAllQuizzes, fetchAllUpdatedSubmissions, fetchUserProfile } from '../utils/canvas.js';
-import { parseCluster } from '../utils/parseCluster.js';
+import { fetchAllQuizzes, fetchAllUpdatedSubmissions, fetchUserProfile, fetchAllCourses } from '../utils/canvas.js';
+import { parseCluster, type ParsedQuiz } from '../utils/parseCluster.js';
 import { updateRatings } from '../utils/elo.js';
-import { COURSES_CONFIG } from '../config.js';
 import { env } from '../env.js';
 import type { CanvasSubmission } from '../types.js';
 
@@ -121,13 +120,13 @@ export async function syncCourseSubmissions(courseId: string): Promise<void> {
     await processWithConcurrency(
       quizzes,
       async (quiz) => {
-        const cluster = parseCluster(quiz.title);
-        if (!cluster) {
+        const parsedQuiz = parseCluster(quiz.title);
+        if (!parsedQuiz) {
           console.log(`Skipping quiz "${quiz.title}" - no cluster found`);
           return;
         }
 
-        console.log(`Processing quiz: ${quiz.title} (Cluster: ${cluster})`);
+        console.log(`Processing quiz: ${quiz.title} (Types: [${parsedQuiz.types.join(', ')}])`);
 
         // Fetch updated submissions since last sync
         const submissions = await fetchAllUpdatedSubmissions(courseId, quiz.id.toString(), lastSync);
@@ -144,7 +143,7 @@ export async function syncCourseSubmissions(courseId: string): Promise<void> {
           submissions,
           async (submission) => {
             try {
-              await processSubmission(submission, quiz, cluster, courseId);
+              await processSubmission(submission, quiz, parsedQuiz, courseId);
             } catch (error) {
               console.error(`Error processing submission ${submission.id}:`, error);
               // Continue with other submissions even if one fails
@@ -181,7 +180,7 @@ export async function syncCourseSubmissions(courseId: string): Promise<void> {
 async function processSubmission(
   submission: CanvasSubmission,
   quiz: any,
-  cluster: string,
+  parsedQuiz: ParsedQuiz,
   courseId: string
 ): Promise<void> {
   // Skip if not finished
@@ -205,17 +204,16 @@ async function processSubmission(
   const studentId = submission.user_id.toString();
   const quizId = submission.quiz_id.toString();
 
-  console.log(`Processing submission for student ${studentId}, quiz ${quizId}, cluster ${cluster}`);
+  console.log(`Processing submission for student ${studentId}, quiz ${quizId}, types: [${parsedQuiz.types.join(', ')}]`);
 
   // Use transaction for better performance and data consistency
   const result = await db.$transaction(async (tx) => {
     // Find or create user
     let user = await tx.canvasUser.findUnique({
       where: {
-        studentId_courseId_cluster: {
+        studentId_courseId: {
           studentId,
-          courseId,
-          cluster
+          courseId
         }
       },
       include: {
@@ -228,7 +226,7 @@ async function processSubmission(
     });
 
     if (!user) {
-      console.log(`Creating new user ${studentId} for course ${courseId}, cluster ${cluster}`);
+      console.log(`Creating new user ${studentId} for course ${courseId}`);
       
       // Fetch user profile from Canvas (with caching)
       const profile = await getCachedUserProfile(studentId);
@@ -237,7 +235,6 @@ async function processSubmission(
         data: {
           studentId,
           courseId,
-          cluster,
           name: profile.name,
           shortName: profile.short_name,
           rating: 1500 // Default rating
@@ -276,7 +273,10 @@ async function processSubmission(
           quizId,
           quizName: quiz.title,
           courseId,
-          cluster,
+          types: parsedQuiz.types,
+          lesson: parsedQuiz.lesson,
+          difficulty: parsedQuiz.difficulty,
+          class: parsedQuiz.class,
           rating: 1500, // Default rating
           submissionCount: 0
         }
@@ -285,13 +285,13 @@ async function processSubmission(
 
     // Calculate new ratings
     const userScore = submission.score! / submission.quiz_points_possible!;
-    const userProblemsInCluster = user!.quizzes.filter((q: any) => q.question.cluster === cluster).length;
+    const userProblemsSolved = user!.quizzes.length; // Count all problems solved by user in this course
     
     const { newUserRating, newQuestionRating, ratingChange } = updateRatings(
       user!.rating,
       question.rating,
       userScore,
-      userProblemsInCluster,
+      userProblemsSolved,
       question.submissionCount
     );
 
@@ -338,12 +338,16 @@ export async function syncAllCourses(): Promise<{ success: boolean; message: str
   const startTime = Date.now();
   
   try {
-    console.log('Starting sync for all configured courses...');
+    console.log('Fetching all courses from Canvas...');
     
-    // Sync all courses from config
-    for (const courseConfig of COURSES_CONFIG) {
-      console.log(`Syncing course: ${courseConfig.id}`);
-      await syncCourseSubmissions(courseConfig.id);
+    // Fetch all active courses from Canvas
+    const courses = await fetchAllCourses();
+    console.log(`Found ${courses.length} active courses in Canvas`);
+    
+    // Sync all courses
+    for (const course of courses) {
+      console.log(`Syncing course: ${course.id} - ${course.name}`);
+      await syncCourseSubmissions(course.id);
     }
     
     const duration = Date.now() - startTime;
@@ -351,7 +355,7 @@ export async function syncAllCourses(): Promise<{ success: boolean; message: str
     
     return {
       success: true,
-      message: `Synced ${COURSES_CONFIG.length} courses in ${duration}ms`
+      message: `Synced ${courses.length} courses in ${duration}ms`
     };
   } catch (error) {
     const duration = Date.now() - startTime;

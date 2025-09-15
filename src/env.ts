@@ -25,11 +25,6 @@ const envSchema = z.object({
     .string()
     .min(1, 'CANVAS_ACCESS_TOKEN is required'),
 
-  // Course Configuration
-  COURSE_ID: z
-    .string()
-    .optional(),
-
   // Application Configuration
   PORT: z
     .union([z.string(), z.number()])
