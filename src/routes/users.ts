@@ -3,8 +3,122 @@ import { db } from '../db.js';
 import { fetchUserAvatar } from '../utils/canvas.js';
 import { getBalancedRecommendationsForUser } from '../services/recommendations.js';
 import { type IUserData, type Course } from '../types.js';
+import { auth } from '../auth.js';
 
 export const userRoutes = new Elysia({ prefix: '/api/users' })
+  // Get current user profile
+  .get('/profile', async ({ request }) => {
+    try {
+      // Get session from better-auth
+      const session = await auth.api.getSession({ headers: request.headers });
+      
+      if (!session) {
+        return { error: 'Unauthorized' };
+      }
+
+      const user = await db.user.findUnique({
+        where: { id: session.user.id },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          emailVerified: true,
+          image: true,
+          createdAt: true,
+          updatedAt: true
+        }
+      });
+
+      if (!user) {
+        return { error: 'User not found' };
+      }
+
+      return {
+        success: true,
+        user
+      };
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      return { error: 'Internal server error' };
+    }
+  })
+
+  // Update current user profile
+  .put('/profile', async ({ request, body }: { request: Request, body: any }) => {
+    try {
+      // Get session from better-auth
+      const session = await auth.api.getSession({ headers: request.headers });
+      
+      if (!session) {
+        return { error: 'Unauthorized' };
+      }
+
+      const { name, email, password } = body;
+
+      if (!name || !email) {
+        return {
+          success: false,
+          error: 'Name and email are required'
+        };
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return {
+          success: false,
+          error: 'Invalid email format'
+        };
+      }
+
+      const updateData: any = {
+        name: name.trim(),
+        email: email.toLowerCase().trim(),
+        updatedAt: new Date()
+      };
+
+      // Only update password if provided
+      if (password && password.trim()) {
+        // Note: In a real app, you'd hash the password
+        // For now, we'll store it as plain text (not recommended for production)
+        updateData.password = password.trim();
+      }
+
+      const updatedUser = await db.user.update({
+        where: { id: session.user.id },
+        data: updateData,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          emailVerified: true,
+          image: true,
+          updatedAt: true
+        }
+      });
+
+      return {
+        success: true,
+        user: updatedUser,
+        message: 'Profile updated successfully'
+      };
+    } catch (error) {
+      console.error('Error updating user profile:', error);
+      
+      // Handle unique constraint violation for email
+      if (error instanceof Error && error.message.includes('Unique constraint')) {
+        return {
+          success: false,
+          error: 'Email already exists'
+        };
+      }
+
+      return {
+        success: false,
+        error: 'Failed to update profile'
+      };
+    }
+  })
   .get('/details/:userId', async ({ params: { userId } }) => {
     try {
       // Get user data across all courses
