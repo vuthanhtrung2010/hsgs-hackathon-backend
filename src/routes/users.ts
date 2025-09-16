@@ -53,7 +53,7 @@ export const userRoutes = new Elysia({ prefix: '/api/users' })
         return { error: 'Unauthorized' };
       }
 
-      const { name, email, password } = body;
+      const { name, email, password, oldPassword } = body;
 
       if (!name || !email) {
         return {
@@ -77,13 +77,35 @@ export const userRoutes = new Elysia({ prefix: '/api/users' })
         updatedAt: new Date()
       };
 
-      // Only update password if provided
+      // Handle password update separately
       if (password && password.trim()) {
-        // Note: In a real app, you'd hash the password
-        // For now, we'll store it as plain text (not recommended for production)
-        updateData.password = password.trim();
+        // Validate old password
+        if (!oldPassword || !oldPassword.trim()) {
+          return {
+            success: false,
+            error: 'Current password is required when changing password'
+          };
+        }
+
+        // Use better-auth's built-in changePassword method
+        try {
+          await auth.api.changePassword({
+            body: {
+              newPassword: password.trim(),
+              currentPassword: oldPassword.trim(),
+              revokeOtherSessions: false, // Don't revoke other sessions for now
+            },
+            headers: request.headers,
+          });
+        } catch (error: any) {
+          return {
+            success: false,
+            error: error.message || 'Failed to change password'
+          };
+        }
       }
 
+      // Update user profile (name, email)
       const updatedUser = await db.user.update({
         where: { id: session.user.id },
         data: updateData,
