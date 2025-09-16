@@ -1,6 +1,7 @@
 import { Elysia } from 'elysia';
 import { db } from '../db.js';
 import { fetchAllCourses } from '../utils/canvas.js';
+import { env } from '../env.js';
 
 export const courseRoutes = new Elysia({ prefix: '/api/courses' })
   .get('/', async () => {
@@ -34,7 +35,14 @@ export const courseRoutes = new Elysia({ prefix: '/api/courses' })
         }
       });
 
-      return courses;
+      // Add canvasUrl to each course
+      const coursesWithUrl = courses.map(course => ({
+        id: course.id,
+        name: course.name,
+        canvasUrl: `${env.CANVAS_BASE_URL}/courses/${course.id}`
+      }));
+
+      return coursesWithUrl;
     } catch (error) {
       console.error('Error getting courses:', error);
       return { error: 'Internal server error' };

@@ -1,5 +1,6 @@
 import { db } from '../db.js';
 import { CLUSTER_NAMES, type ClusterType, type Recommendations } from '../types.js';
+import { env } from '../env.js';
 
 /**
  * Get problem recommendations for a user in a specific course and cluster
@@ -10,13 +11,12 @@ export async function getRecommendationsForUser(
   cluster: ClusterType,
   count: number = 3
 ): Promise<Recommendations[]> {
-  // Get user's current rating in this cluster
+  // Get user's current rating in this course
   const user = await db.canvasUser.findUnique({
     where: {
-      studentId_courseId_cluster: {
+      studentId_courseId: {
         studentId,
-        courseId,
-        cluster
+        courseId
       }
     },
     include: {
@@ -31,18 +31,19 @@ export async function getRecommendationsForUser(
   const userRating = user?.rating || 1500;
   const solvedQuizIds = user?.quizzes.map((q: any) => q.question.quizId) || [];
 
-  // Find unsolved problems in this cluster with rating close to user's rating
-  // Prefer problems slightly above user's rating for growth
+  // Find unsolved problems with types that match the cluster
+  // Use the first type that matches or contains the cluster name
   const unsolvedQuestions = await db.question.findMany({
     where: {
       courseId,
-      cluster,
       quizId: {
         notIn: solvedQuizIds
+      },
+      types: {
+        hasSome: [cluster] // Check if cluster is in the types array
       }
     },
     orderBy: {
-      // Order by rating difference from user's rating + 100 (slightly harder)
       rating: 'asc'
     },
     take: count * 3 // Get more than needed for better filtering
@@ -66,7 +67,8 @@ export async function getRecommendationsForUser(
     quizId: question.quizId,
     quizName: question.quizName,
     cluster: cluster,
-    rating: Math.round(question.rating)
+    rating: Math.round(question.rating),
+    canvasUrl: `${env.CANVAS_BASE_URL}/courses/${courseId}/quizzes/${question.quizId}`
   }));
 }
 
@@ -101,8 +103,10 @@ export async function getBalancedRecommendationsForUser(
 
   // Get user ratings by cluster (default to 1500 for new clusters)
   const userRatingsByCluster: Record<string, number> = {};
-  for (const user of users) {
-    userRatingsByCluster[user.cluster] = user.rating;
+  // Since users don't have cluster field, we'll use a single rating for all clusters
+  const userRating = users.length > 0 ? users[0]!.rating : 1500;
+  for (const cluster of CLUSTER_NAMES) {
+    userRatingsByCluster[cluster] = userRating;
   }
 
   const allRecommendations: (Recommendations & { priority: number })[] = [];
@@ -111,11 +115,13 @@ export async function getBalancedRecommendationsForUser(
   for (const cluster of CLUSTER_NAMES) {
     const userRating = userRatingsByCluster[cluster] || 1500; // Default rating for new clusters
 
-    // Find unsolved problems in this cluster
+    // Find unsolved problems with types that match the cluster
     const unsolvedQuestions = await db.question.findMany({
       where: {
         courseId,
-        cluster,
+        types: {
+          hasSome: [cluster]
+        },
         quizId: {
           notIn: solvedQuizIds
         }
@@ -140,6 +146,7 @@ export async function getBalancedRecommendationsForUser(
         quizName: question.quizName,
         cluster: cluster as ClusterType,
         rating: Math.round(question.rating),
+        canvasUrl: `${env.CANVAS_BASE_URL}/courses/${courseId}/quizzes/${question.quizId}`,
         priority
       });
     }
@@ -157,7 +164,8 @@ export async function getBalancedRecommendationsForUser(
         quizId: rec.quizId,
         quizName: rec.quizName,
         cluster: rec.cluster,
-        rating: rec.rating
+        rating: rec.rating,
+        canvasUrl: rec.canvasUrl
       });
       usedClusters.add(rec.cluster);
     }
@@ -173,7 +181,8 @@ export async function getBalancedRecommendationsForUser(
         quizId: rec.quizId,
         quizName: rec.quizName,
         cluster: rec.cluster,
-        rating: rec.rating
+        rating: rec.rating,
+        canvasUrl: rec.canvasUrl
       });
     }
   }
