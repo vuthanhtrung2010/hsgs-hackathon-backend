@@ -128,6 +128,33 @@ export async function syncCourseSubmissions(courseId: string): Promise<void> {
 
         console.log(`Processing quiz: ${quiz.title} (Types: [${parsedQuiz.types.join(', ')}])`);
 
+        // Find or create question first, regardless of submissions
+        let question = await db.question.findUnique({
+          where: {
+            quizId_courseId: {
+              quizId: quiz.id.toString(),
+              courseId
+            }
+          }
+        });
+
+        if (!question) {
+          console.log(`Creating new question ${quiz.id} for course ${courseId}`);
+          question = await db.question.create({
+            data: {
+              quizId: quiz.id.toString(),
+              quizName: quiz.title,
+              courseId,
+              types: parsedQuiz.types,
+              lesson: parsedQuiz.lesson,
+              difficulty: parsedQuiz.difficulty,
+              class: parsedQuiz.class,
+              rating: 1500, // Default rating
+              submissionCount: 0
+            }
+          });
+        }
+
         // Fetch updated submissions since last sync
         const submissions = await fetchAllUpdatedSubmissions(courseId, quiz.id.toString(), lastSync);
         
@@ -143,7 +170,7 @@ export async function syncCourseSubmissions(courseId: string): Promise<void> {
           submissions,
           async (submission) => {
             try {
-              await processSubmission(submission, quiz, parsedQuiz, courseId);
+              await processSubmission(submission, quiz, parsedQuiz, courseId, question);
             } catch (error) {
               console.error(`Error processing submission ${submission.id}:`, error);
               // Continue with other submissions even if one fails
@@ -181,7 +208,8 @@ async function processSubmission(
   submission: CanvasSubmission,
   quiz: any,
   parsedQuiz: ParsedQuiz,
-  courseId: string
+  courseId: string,
+  question: any // Pass the question as parameter since it's already created
 ): Promise<void> {
   // Skip if not finished
   if (!submission.finished_at) {
@@ -256,32 +284,7 @@ async function processSubmission(
       return null;
     }
 
-    // Find or create question
-    let question = await tx.question.findUnique({
-      where: {
-        quizId_courseId: {
-          quizId,
-          courseId
-        }
-      }
-    });
-
-    if (!question) {
-      console.log(`Creating new question ${quizId} for course ${courseId}`);
-      question = await tx.question.create({
-        data: {
-          quizId,
-          quizName: quiz.title,
-          courseId,
-          types: parsedQuiz.types,
-          lesson: parsedQuiz.lesson,
-          difficulty: parsedQuiz.difficulty,
-          class: parsedQuiz.class,
-          rating: 1500, // Default rating
-          submissionCount: 0
-        }
-      });
-    }
+    // Question is now passed as parameter, no need to find/create
 
     // Calculate new ratings
     const userScore = submission.score! / submission.quiz_points_possible!;
