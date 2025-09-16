@@ -1,6 +1,6 @@
 import { db } from '../db.js';
 import { fetchAllQuizzes, fetchAllUpdatedSubmissions, fetchUserProfile, fetchAllCourses } from '../utils/canvas.js';
-import { parseCluster, type ParsedQuiz } from '../utils/parseCluster.js';
+import { parseQuiz, type ParsedQuiz } from '../utils/parseQuiz.js';
 import { updateRatings } from '../utils/elo.js';
 import { env } from '../env.js';
 import type { CanvasSubmission } from '../types.js';
@@ -120,7 +120,7 @@ export async function syncCourseSubmissions(courseId: string): Promise<void> {
     await processWithConcurrency(
       quizzes,
       async (quiz) => {
-        const parsedQuiz = parseCluster(quiz.title);
+        const parsedQuiz = parseQuiz(quiz.title);
         if (!parsedQuiz) {
           console.log(`Skipping quiz "${quiz.title}" - no cluster found`);
           return;

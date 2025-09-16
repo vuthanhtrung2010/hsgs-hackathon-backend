@@ -2,12 +2,12 @@ import { Elysia } from 'elysia';
 import { db } from '../db.js';
 import { fetchUserAvatar } from '../utils/canvas.js';
 import { getBalancedRecommendationsForUser } from '../services/recommendations.js';
-import { CLUSTER_NAMES, type IUserData, type IUsersListData, type Course, type Clusters } from '../types.js';
+import { type IUserData, type Course } from '../types.js';
 
 export const userRoutes = new Elysia({ prefix: '/api/users' })
   .get('/details/:userId', async ({ params: { userId } }) => {
     try {
-      // Get user data across all courses and clusters
+      // Get user data across all courses
       const users = await db.canvasUser.findMany({
         where: { studentId: userId },
         include: {
@@ -41,7 +41,7 @@ export const userRoutes = new Elysia({ prefix: '/api/users' })
             minRating: user.rating,
             maxRating: user.rating,
             ratingChanges: [],
-            clusters: {}
+            clusters: {} // Keep empty for compatibility, but not used
           };
         }
 
@@ -50,9 +50,6 @@ export const userRoutes = new Elysia({ prefix: '/api/users' })
         // Update rating bounds
         courseInfo.minRating = Math.min(courseInfo.minRating, user.rating);
         courseInfo.maxRating = Math.max(courseInfo.maxRating, user.rating);
-        
-        // Set cluster rating
-        courseInfo.clusters[user.cluster] = user.rating;
 
         // Add rating changes from quizzes
         for (const quiz of user.quizzes) {
@@ -66,18 +63,9 @@ export const userRoutes = new Elysia({ prefix: '/api/users' })
       // Get recommendations for the primary course (first one)
       const primaryCourse = Object.values(courseData)[0];
       if (primaryCourse) {
-        // Get 4-5 balanced recommendations across different clusters
+        // Get recommendations based on quiz types instead of clusters
         const recommendations = await getBalancedRecommendationsForUser(userId, primaryCourse.courseId, 4);
         primaryCourse.recommendations = recommendations;
-      }
-
-      // Fill missing clusters with null
-      for (const course of Object.values(courseData)) {
-        const clusters: Clusters = {};
-        for (const cluster of CLUSTER_NAMES) {
-          clusters[cluster] = course.clusters[cluster] || null;
-        }
-        course.clusters = clusters;
       }
 
       const userData: IUserData = {
@@ -85,8 +73,8 @@ export const userRoutes = new Elysia({ prefix: '/api/users' })
         name: users[0]?.name || "Undefined name",
         shortName: users[0]?.shortName || "Undefined short name",
         rating: Math.round(Object.values(courseData).reduce((sum, course) => {
-          const validRatings = Object.values(course.clusters).filter(r => r !== null) as number[];
-          return sum + (validRatings.length ? validRatings.reduce((a, b) => a + b, 0) / validRatings.length : 1500);
+          // Use course average rating since we don't have clusters
+          return sum + course.minRating; // Simplified - use min rating as representative
         }, 0) / Object.keys(courseData).length),
         avatarURL,
         courses: Object.values(courseData)

@@ -1,19 +1,6 @@
-export const CLUSTER_NAMES = [
-  "ART", "BUSINESS", "COMMUNICATION", "CRIME", "ECONOMY", "EDUCATION",
-  "ENVIRONMENT", "FAMILY AND CHILDREN", "FOOD", "HEALTH", "LANGUAGE",
-  "MEDIA", "READING", "TECHNOLOGY", "TRANSPORT", "TRAVEL"
-] as const;
-
-export type ClusterType = typeof CLUSTER_NAMES[number];
-
-export interface Clusters {
-  [key: string]: number | null;
-}
-
 export interface Recommendations {
   quizId: string;
   quizName: string;
-  cluster: ClusterType;
   rating: number;
   canvasUrl: string;
 }
@@ -28,7 +15,7 @@ export interface Course {
     rating: number;
   }[];
   recommendations?: Recommendations[];
-  clusters: Clusters;
+  clusters: Record<string, any>; // Keep for compatibility but simplified
 }
 
 export interface IUserData {

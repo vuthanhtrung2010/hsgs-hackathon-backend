@@ -320,4 +320,132 @@ export const adminRoutes = new Elysia({ prefix: '/api/admin' })
         error: 'Failed to delete announcement'
       };
     }
+  })
+
+  // Get all users (better-auth users)
+  .get('/users', async () => {
+    try {
+      const users = await db.user.findMany({
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          emailVerified: true,
+          image: true,
+          createdAt: true,
+          updatedAt: true
+        },
+        orderBy: {
+          createdAt: 'desc'
+        }
+      });
+
+      return {
+        success: true,
+        users
+      };
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      return {
+        success: false,
+        error: 'Failed to fetch users'
+      };
+    }
+  })
+
+  // Get specific user by ID
+  .get('/users/:id', async ({ params }: { params: { id: string } }) => {
+    try {
+      const user = await db.user.findUnique({
+        where: { id: params.id },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          emailVerified: true,
+          image: true,
+          createdAt: true,
+          updatedAt: true
+        }
+      });
+
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not found'
+        };
+      }
+
+      return {
+        success: true,
+        user
+      };
+    } catch (error) {
+      console.error('Error fetching user:', error);
+      return {
+        success: false,
+        error: 'Failed to fetch user'
+      };
+    }
+  })
+
+  // Update user information
+  .put('/users/:id', async ({ params, body }: { params: { id: string }, body: any }) => {
+    try {
+      const { name, email } = body;
+
+      if (!name || !email) {
+        return {
+          success: false,
+          error: 'Name and email are required'
+        };
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return {
+          success: false,
+          error: 'Invalid email format'
+        };
+      }
+
+      const updatedUser = await db.user.update({
+        where: { id: params.id },
+        data: {
+          name: name.trim(),
+          email: email.toLowerCase().trim(),
+          updatedAt: new Date()
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          emailVerified: true,
+          image: true,
+          updatedAt: true
+        }
+      });
+
+      return {
+        success: true,
+        user: updatedUser,
+        message: 'User updated successfully'
+      };
+    } catch (error) {
+      console.error('Error updating user:', error);
+      
+      // Handle unique constraint violation for email
+      if (error instanceof Error && error.message.includes('Unique constraint')) {
+        return {
+          success: false,
+          error: 'Email already exists'
+        };
+      }
+
+      return {
+        success: false,
+        error: 'Failed to update user'
+      };
+    }
   });

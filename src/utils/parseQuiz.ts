@@ -16,7 +16,7 @@ export interface ParsedQuiz {
  * @param quizName - The quiz title from Canvas
  * @returns Parsed quiz info if all components found, null otherwise
  */
-export function parseCluster(quizName: string): ParsedQuiz | null {
+export function parseQuiz(quizName: string): ParsedQuiz | null {
   // Extract all types from the brackets first
   const typesMatch = quizName.match(/\[([^\]]+)\]/g);
   if (!typesMatch || typesMatch.length === 0) {
