@@ -177,7 +177,7 @@ export const userRoutes = new Elysia({ prefix: '/api/users' })
             minRating: user.rating,
             maxRating: user.rating,
             ratingChanges: [],
-            clusters: {} // Keep empty for compatibility, but not used
+            clusters: {} // Will be populated with type-based skills
           };
         }
 
@@ -194,6 +194,33 @@ export const userRoutes = new Elysia({ prefix: '/api/users' })
             rating: user.rating // This is simplified - ideally track historical ratings
           });
         }
+
+        // Calculate skills by question types
+        const typeRatings: Record<string, number[]> = {};
+        
+        for (const quiz of user.quizzes) {
+          const question = quiz.question;
+          
+          // Process each type for this question
+          for (const type of question.types) {
+            if (!typeRatings[type]) {
+              typeRatings[type] = [];
+            }
+            // Use the question rating as a measure of skill in this type
+            typeRatings[type].push(question.rating);
+          }
+        }
+
+        // Calculate average rating per type
+        const skillsClusters: Record<string, number> = {};
+        for (const [type, ratings] of Object.entries(typeRatings)) {
+          if (ratings.length > 0) {
+            skillsClusters[type] = ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length;
+          }
+        }
+
+        // Update course clusters with calculated skills
+        courseInfo.clusters = skillsClusters;
       }
 
       // Get recommendations for the primary course (first one)
