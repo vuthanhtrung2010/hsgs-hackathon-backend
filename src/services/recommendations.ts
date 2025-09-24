@@ -61,7 +61,7 @@ export async function getRecommendationsForUser(
 
   return sortedQuestions.map(({ question }: any) => ({
     quizId: question.quizId,
-    quizName: question.quizName,
+    quizName: question.lesson || question.quizName, // Use lesson (clean name) or fallback to quizName
     rating: Math.round(question.rating),
     canvasUrl: `${env.CANVAS_BASE_URL}/courses/${courseId}/quizzes/${question.quizId}`
   }));
@@ -125,7 +125,7 @@ export async function getBalancedRecommendationsForUser(
 
   return sortedQuestions.map(({ question }: any) => ({
     quizId: question.quizId,
-    quizName: question.quizName,
+    quizName: question.lesson || question.quizName, // Use lesson (clean name) or fallback to quizName
     rating: Math.round(question.rating),
     canvasUrl: `${env.CANVAS_BASE_URL}/courses/${courseId}/quizzes/${question.quizId}`
   }));

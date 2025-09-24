@@ -36,7 +36,7 @@ export const problemRoutes = new Elysia({ prefix: '/api/problems' })
         const course = courseMap.get(question.courseId);
         return {
           problemId: question.quizId,
-          name: question.quizName,
+          name: question.lesson || question.quizName, // Use lesson (clean name) or fallback to quizName
           course: {
             courseId: question.courseId,
             name: course?.name || `Course ${question.courseId}`,
