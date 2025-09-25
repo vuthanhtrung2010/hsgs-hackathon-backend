@@ -233,9 +233,41 @@ export async function syncCourseSubmissions(courseId: string): Promise<void> {
 
         console.log(`Found ${submissions.length} new submissions for quiz ${quiz.id}`);
 
+        // Batch check: Get all existing submissions for this quiz to avoid processing duplicates
+        const existingSubmissions = await db.quiz.findMany({
+          where: {
+            question: {
+              quizId: quiz.id.toString(),
+              courseId
+            }
+          },
+          select: {
+            user: {
+              select: {
+                studentId: true
+              }
+            }
+          }
+        });
+
+        const existingUserIds = new Set(existingSubmissions.map(sub => sub.user.studentId));
+        console.log(`Found ${existingUserIds.size} users who already completed quiz ${quiz.id}`);
+
+        // Filter out submissions from users who already completed this quiz
+        const newSubmissions = submissions.filter(submission => {
+          const studentId = submission.user_id.toString();
+          const isExisting = existingUserIds.has(studentId);
+          if (isExisting) {
+            console.log(`Skipping submission ${submission.id} - User ${studentId} already completed quiz ${quiz.id}`);
+          }
+          return !isExisting;
+        });
+
+        console.log(`Processing ${newSubmissions.length} new submissions (${submissions.length - newSubmissions.length} skipped as duplicates)`);
+
         // Process submissions in parallel batches for this quiz
         await processWithConcurrency(
-          submissions,
+          newSubmissions,
           async (submission) => {
             try {
               await processSubmission(submission, quiz, parsedQuiz, courseId, question);
@@ -271,6 +303,8 @@ export async function syncCourseSubmissions(courseId: string): Promise<void> {
 
 /**
  * Process a single submission
+ * IMPORTANT: Only processes the FIRST submission per user per quiz.
+ * If a user already has a submission for a quiz, subsequent submissions are ignored.
  */
 async function processSubmission(
   submission: CanvasSubmission,
@@ -345,10 +379,11 @@ async function processSubmission(
       });
     }
 
-    // Check if user has already taken this quiz
+    // Check if user has already taken this quiz (FIRST SUBMISSION ONLY policy)
+    // If a user already has a submission for this quiz, ignore any subsequent submissions
     const existingQuiz = user!.quizzes.find((q: any) => q.question.quizId === quizId);
     if (existingQuiz) {
-      console.log(`User ${studentId} already completed quiz ${quizId}`);
+      console.log(`User ${studentId} already completed quiz ${quizId} - ignoring subsequent submission`);
       return null;
     }
 
