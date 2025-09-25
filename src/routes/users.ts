@@ -174,8 +174,8 @@ export const userRoutes = new Elysia({ prefix: '/api/users' })
           courseData[user.courseId] = {
             courseId: user.courseId,
             courseName: course?.name || `Course ${user.courseId}`,
-            minRating: user.minRating || user.rating, // Use stored minRating
-            maxRating: user.maxRating || user.rating, // Use stored maxRating
+            minRating: 1500, // Will be calculated from rating changes
+            maxRating: 1500, // Will be calculated from rating changes
             ratingChanges: [],
             clusters: {} // Will be populated with type-based skills
           };

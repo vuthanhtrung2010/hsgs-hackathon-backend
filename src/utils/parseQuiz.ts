@@ -40,7 +40,7 @@ export function parseQuiz(quizName: string): ParsedQuiz | null {
   const remainingText = quizName.slice(lastBracketEnd).trim();
   
   // Try to match with full pattern first (lesson <difficulty> (class))
-  const fullPattern = /^(.+?)\s*<(\d+(?:\.\d+)?)>\s*\((\d+)\)$/i;
+  const fullPattern = /^(.+?)\s*<(-?\d+(?:\.\d+)?)>\s*\((\d+)\)$/i;
   const fullMatch = remainingText.match(fullPattern);
 
   if (fullMatch) {
@@ -79,7 +79,7 @@ export function parseQuiz(quizName: string): ParsedQuiz | null {
   }
 
   // Try to match with difficulty only pattern (lesson <difficulty>)
-  const difficultyOnlyPattern = /^(.+?)\s*<(\d+(?:\.\d+)?)>$/i;
+  const difficultyOnlyPattern = /^(.+?)\s*<(-?\d+(?:\.\d+)?)>$/i;
   const difficultyOnlyMatch = remainingText.match(difficultyOnlyPattern);
 
   if (difficultyOnlyMatch) {
