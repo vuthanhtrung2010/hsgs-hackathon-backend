@@ -1,5 +1,5 @@
 import { db } from '../db.js';
-import { fetchAllQuizzes, fetchAllUpdatedSubmissions, fetchUserProfile, fetchAllCourses } from '../utils/canvas.js';
+import { fetchAllQuizzes, fetchAllUpdatedSubmissions, fetchUserProfile, fetchAllCourses, fetchCourseEnrollments } from '../utils/canvas.js';
 import { parseQuiz, type ParsedQuiz } from '../utils/parseQuiz.js';
 import { updateRatings } from '../utils/elo.js';
 import { env } from '../env.js';
@@ -14,7 +14,8 @@ const userProfileCache = new Map<string, any>();
 async function syncCourseInfo(courseId: string) {
   try {
     // Fetch course info from Canvas API
-    const response = await fetch(`${env.CANVAS_BASE_URL}/api/v1/courses/${courseId}`, {
+    const url = new URL(`/api/v1/courses/${courseId}`, env.CANVAS_BASE_URL);
+    const response = await fetch(url.toString(), {
       headers: {
         'Authorization': `Bearer ${env.CANVAS_ACCESS_TOKEN}`
       }
@@ -62,6 +63,70 @@ async function syncCourseInfo(courseId: string) {
 }
 
 /**
+ * Sync users from course enrollments
+ */
+async function syncCourseUsers(courseId: string): Promise<void> {
+  console.log(`Starting user sync for course ${courseId}`);
+  
+  try {
+    // Fetch student enrollments from Canvas
+    const enrollments = await fetchCourseEnrollments(courseId);
+    console.log(`Found ${enrollments.length} student enrollments in course ${courseId}`);
+
+    // Process enrollments in batches
+    await processWithConcurrency(
+      enrollments,
+      async (enrollment) => {
+        const studentId = enrollment.user_id.toString();
+        
+        // Check if user already exists
+        const existingUser = await db.canvasUser.findUnique({
+          where: {
+            studentId_courseId: {
+              studentId,
+              courseId
+            }
+          }
+        });
+
+        if (existingUser) {
+          // Update user info if needed
+          if (existingUser.name !== enrollment.user.name || 
+              existingUser.shortName !== enrollment.user.short_name) {
+            await db.canvasUser.update({
+              where: { id: existingUser.id },
+              data: {
+                name: enrollment.user.name,
+                shortName: enrollment.user.short_name
+              }
+            });
+            console.log(`Updated user ${studentId} info`);
+          }
+        } else {
+          // Create new user with base rating 1500
+          await db.canvasUser.create({
+            data: {
+              studentId,
+              courseId,
+              name: enrollment.user.name,
+              shortName: enrollment.user.short_name,
+              rating: 1500 // Base rating as requested
+            }
+          });
+          console.log(`Created new user ${studentId} with base rating 1500`);
+        }
+      },
+      CONCURRENCY_LIMIT
+    );
+
+    console.log(`User sync completed for course ${courseId}`);
+  } catch (error) {
+    console.error(`Error syncing users for course ${courseId}:`, error);
+    throw error;
+  }
+}
+
+/**
  * Get user profile with caching
  */
 async function getCachedUserProfile(studentId: string): Promise<{ name: string; short_name: string }> {
@@ -97,6 +162,9 @@ export async function syncCourseSubmissions(courseId: string): Promise<void> {
 
   // First, sync course information
   await syncCourseInfo(courseId);
+
+  // Then, sync users from enrollments
+  await syncCourseUsers(courseId);
 
   // Get last sync time or use epoch if first sync
   let lastSync = new Date('1970-01-01T00:00:00Z');
@@ -254,7 +322,7 @@ async function processSubmission(
     });
 
     if (!user) {
-      console.log(`Creating new user ${studentId} for course ${courseId}`);
+      console.log(`Creating new user ${studentId} for course ${courseId} during submission processing`);
       
       // Fetch user profile from Canvas (with caching)
       const profile = await getCachedUserProfile(studentId);
@@ -265,7 +333,7 @@ async function processSubmission(
           courseId,
           name: profile.name,
           shortName: profile.short_name,
-          rating: 1500 // Default rating
+          rating: 1500 // Base rating as requested
         },
         include: {
           quizzes: {
