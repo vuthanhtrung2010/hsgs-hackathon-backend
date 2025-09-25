@@ -174,8 +174,8 @@ export const userRoutes = new Elysia({ prefix: '/api/users' })
           courseData[user.courseId] = {
             courseId: user.courseId,
             courseName: course?.name || `Course ${user.courseId}`,
-            minRating: user.rating,
-            maxRating: user.rating,
+            minRating: user.minRating || user.rating, // Use stored minRating
+            maxRating: user.maxRating || user.rating, // Use stored maxRating
             ratingChanges: [],
             clusters: {} // Will be populated with type-based skills
           };
@@ -183,15 +183,43 @@ export const userRoutes = new Elysia({ prefix: '/api/users' })
 
         const courseInfo = courseData[user.courseId]!; // We know it exists from above
         
-        // Update rating bounds
-        courseInfo.minRating = Math.min(courseInfo.minRating, user.rating);
-        courseInfo.maxRating = Math.max(courseInfo.maxRating, user.rating);
-
-        // Add rating changes from quizzes
-        for (const quiz of user.quizzes) {
+        // Add rating changes from quizzes - track the cluster rating progression
+        // Sort quizzes by submission date to track rating progression
+        const sortedQuizzes = user.quizzes.sort((a, b) => 
+          new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime()
+        );
+        
+        // Calculate cluster rating progression over time
+        const typeRatingsProgression: Record<string, number[]> = {};
+        
+        for (let i = 0; i < sortedQuizzes.length; i++) {
+          const quiz = sortedQuizzes[i]!;
+          const question = quiz.question;
+          
+          // Update type ratings up to this point in time
+          for (const type of question.types) {
+            if (!typeRatingsProgression[type]) {
+              typeRatingsProgression[type] = [];
+            }
+            typeRatingsProgression[type].push(question.rating);
+          }
+          
+          // Calculate average cluster rating at this point in time
+          const typeAverages: number[] = [];
+          for (const [type, ratings] of Object.entries(typeRatingsProgression)) {
+            if (ratings.length > 0) {
+              const typeAverage = ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length;
+              typeAverages.push(typeAverage);
+            }
+          }
+          
+          const averageClusterRating = typeAverages.length > 0 
+            ? typeAverages.reduce((sum, avg) => sum + avg, 0) / typeAverages.length 
+            : 1500;
+          
           courseInfo.ratingChanges.push({
             date: quiz.submittedAt.toISOString(),
-            rating: user.rating // This is simplified - ideally track historical ratings
+            rating: Math.round(averageClusterRating) // This shows the cluster rating after this quiz
           });
         }
 
@@ -221,6 +249,13 @@ export const userRoutes = new Elysia({ prefix: '/api/users' })
 
         // Update course clusters with calculated skills
         courseInfo.clusters = skillsClusters;
+        
+        // Calculate min/max from rating changes (the cluster rating progression)
+        if (courseInfo.ratingChanges.length > 0) {
+          const ratings = courseInfo.ratingChanges.map(rc => rc.rating);
+          courseInfo.minRating = Math.min(...ratings);
+          courseInfo.maxRating = Math.max(...ratings);
+        }
       }
 
       // Get recommendations for the primary course (first one)

@@ -127,6 +127,59 @@ async function syncCourseUsers(courseId: string): Promise<void> {
 }
 
 /**
+ * Calculate average cluster rating for a user in a specific course
+ */
+async function calculateUserAverageClusterRating(userId: number, courseId: string, tx: any): Promise<number> {
+  // Get all quizzes for this user in this course
+  const userQuizzes = await tx.quiz.findMany({
+    where: {
+      userId: userId,
+      question: {
+        courseId: courseId
+      }
+    },
+    include: {
+      question: true
+    }
+  });
+
+  if (userQuizzes.length === 0) {
+    return 1500; // Default rating if no quizzes
+  }
+
+  // Group question ratings by type
+  const typeRatings: Record<string, number[]> = {};
+  
+  for (const quiz of userQuizzes) {
+    const question = quiz.question;
+    
+    // Process each type for this question
+    for (const type of question.types) {
+      if (!typeRatings[type]) {
+        typeRatings[type] = [];
+      }
+      // Use the question rating as a measure of skill in this type
+      typeRatings[type].push(question.rating);
+    }
+  }
+
+  // Calculate average rating per type, then average across all types
+  const typeAverages: number[] = [];
+  for (const [type, ratings] of Object.entries(typeRatings)) {
+    if (ratings.length > 0) {
+      const typeAverage = ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length;
+      typeAverages.push(typeAverage);
+    }
+  }
+
+  if (typeAverages.length === 0) {
+    return 1500; // Default if no valid types
+  }
+
+  return typeAverages.reduce((sum, avg) => sum + avg, 0) / typeAverages.length;
+}
+
+/**
  * Get user profile with caching
  */
 async function getCachedUserProfile(studentId: string): Promise<{ name: string; short_name: string }> {
@@ -405,10 +458,12 @@ async function processSubmission(
     console.log(`Rating change for question ${quizId}: ${question.rating} -> ${newQuestionRating}`);
 
     // Update user rating, question rating, and create quiz record in parallel
-    await Promise.all([
+    const [updatedUser] = await Promise.all([
       tx.canvasUser.update({
         where: { id: user!.id },
-        data: { rating: newUserRating }
+        data: { 
+          rating: newUserRating
+        }
       }),
       tx.question.update({
         where: { id: question.id },
@@ -428,6 +483,10 @@ async function processSubmission(
         }
       })
     ]);
+
+    // NOW calculate the user's average cluster rating AFTER this new submission is added
+    const currentAverageClusterRating = await calculateUserAverageClusterRating(user!.id, courseId, tx);
+    console.log(`Cluster rating for user ${studentId}: ${currentAverageClusterRating.toFixed(2)}`);
 
     return { studentId, quizId, ratingChange };
   });
