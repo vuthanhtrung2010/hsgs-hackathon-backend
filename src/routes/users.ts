@@ -236,8 +236,13 @@ export const userRoutes = new Elysia({ prefix: '/api/users' })
         name: users[0]?.name || "Undefined name",
         shortName: users[0]?.shortName || "Undefined short name",
         rating: Math.round(Object.values(courseData).reduce((sum, course) => {
-          // Use course average rating since we don't have clusters
-          return sum + course.minRating; // Simplified - use min rating as representative
+          // Calculate average rating across all cluster types for this course
+          const clusterRatings = Object.values(course.clusters);
+          if (clusterRatings.length > 0) {
+            const courseAverage = clusterRatings.reduce((clusterSum, rating) => clusterSum + rating, 0) / clusterRatings.length;
+            return sum + courseAverage;
+          }
+          return sum;
         }, 0) / Object.keys(courseData).length),
         avatarURL,
         courses: Object.values(courseData)
