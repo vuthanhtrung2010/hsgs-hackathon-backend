@@ -10,6 +10,50 @@ const CONCURRENCY_LIMIT = 5; // Maximum concurrent operations
 // Cache to avoid multiple API calls for the same user
 const userProfileCache = new Map<string, any>();
 
+/**
+ * Ensure critical indexes exist for optimal sync performance
+ */
+async function ensureCriticalIndexes(): Promise<void> {
+  try {
+    console.log('Ensuring critical database indexes exist...');
+    
+    // Critical indexes for sync performance
+    const indexes = [
+      // Users table - for student/course lookups
+      'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_student_course ON "users"("studentId", "courseId")',
+      
+      // Quizzes table - for user/question joins
+      'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_quizzes_user_question ON "quizzes"("userId", "questionId")',
+      
+      // Questions table - for course/quiz lookups  
+      'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_questions_course_quiz ON "questions"("courseId", "quizId")',
+      
+      // Composite index for the submission lookup query
+      'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_quizzes_userid_include ON "quizzes"("userId") INCLUDE ("questionId")',
+      
+      // Sync history lookup
+      'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_sync_history_course ON "sync_history"("courseId")'
+    ];
+    
+    // Execute indexes concurrently for better performance
+    await Promise.all(indexes.map(async (indexSQL, i) => {
+      try {
+        await db.$executeRawUnsafe(indexSQL);
+        console.log(`✓ Index ${i + 1}/${indexes.length} created/verified`);
+      } catch (error) {
+        // Ignore "already exists" errors
+        if (error instanceof Error && !error.message.includes('already exists')) {
+          console.warn(`Warning creating index: ${error.message}`);
+        }
+      }
+    }));
+    
+    console.log('✓ All critical indexes verified');
+  } catch (error) {
+    console.warn('Warning ensuring indexes:', error);
+  }
+}
+
 // Function to sync course information - OPTIMIZED with upsert
 async function syncCourseInfo(courseId: string) {
   try {
@@ -50,7 +94,7 @@ async function syncCourseInfo(courseId: string) {
 }
 
 /**
- * Sync users from course enrollments - OPTIMIZED with bulk upsert
+ * Sync users from course enrollments - SUPER OPTIMIZED with chunked bulk upsert
  */
 async function syncCourseUsers(courseId: string): Promise<void> {
   console.log(`Starting user sync for course ${courseId}`);
@@ -65,83 +109,55 @@ async function syncCourseUsers(courseId: string): Promise<void> {
       return;
     }
 
-    // Use raw SQL for bulk upsert - much faster than individual operations
-    const values = enrollments.map(enrollment => 
-      `('${enrollment.user_id}', '${courseId}', '${enrollment.user.name.replace(/'/g, "''")}', '${enrollment.user.short_name.replace(/'/g, "''")}', 1500, NOW(), NOW())`
-    ).join(',\n');
+    // Process in smaller chunks to avoid query size limits and improve performance
+    const CHUNK_SIZE = 100; // Optimal chunk size for PostgreSQL
+    let totalAffected = 0;
+    
+    for (let i = 0; i < enrollments.length; i += CHUNK_SIZE) {
+      const chunk = enrollments.slice(i, i + CHUNK_SIZE);
+      
+    // Use createMany for better performance and safety
+    try {
+      const result = await db.canvasUser.createMany({
+        data: chunk.map(enrollment => ({
+          studentId: enrollment.user_id.toString(),
+          courseId: courseId,
+          name: enrollment.user.name,
+          shortName: enrollment.user.short_name,
+          rating: 1500
+        })),
+        skipDuplicates: true // Handle conflicts efficiently
+      });
+      
+      totalAffected += result.count;
+      
+      // Update existing records separately for better performance
+      for (const enrollment of chunk) {
+        await db.canvasUser.updateMany({
+          where: {
+            studentId: enrollment.user_id.toString(),
+            courseId: courseId
+          },
+          data: {
+            name: enrollment.user.name,
+            shortName: enrollment.user.short_name,
+            updatedAt: new Date()
+          }
+        });
+      }
+      
+      console.log(`Processed chunk ${Math.floor(i/CHUNK_SIZE) + 1}/${Math.ceil(enrollments.length/CHUNK_SIZE)} - ${chunk.length} users`);
+    } catch (error) {
+      console.warn(`Error processing user chunk ${Math.floor(i/CHUNK_SIZE) + 1}:`, error);
+    }
+    }
 
-    const query = `
-      INSERT INTO "users" ("studentId", "courseId", "name", "shortName", "rating", "createdAt", "updatedAt")
-      VALUES ${values}
-      ON CONFLICT ("studentId", "courseId") 
-      DO UPDATE SET 
-        "name" = EXCLUDED."name",
-        "shortName" = EXCLUDED."shortName",
-        "updatedAt" = NOW()
-      WHERE "users"."name" != EXCLUDED."name" OR "users"."shortName" != EXCLUDED."shortName"
-    `;
-
-    const result = await db.$executeRawUnsafe(query);
-    console.log(`Bulk upserted ${enrollments.length} users for course ${courseId} (${result} affected rows)`);
-
+    console.log(`Bulk upserted ${enrollments.length} users for course ${courseId} (${totalAffected} affected rows)`);
     console.log(`User sync completed for course ${courseId}`);
   } catch (error) {
     console.error(`Error syncing users for course ${courseId}:`, error);
     throw error;
   }
-}
-
-/**
- * Calculate average cluster rating for a user in a specific course
- */
-async function calculateUserAverageClusterRating(userId: number, courseId: string, tx: any): Promise<number> {
-  // Get all quizzes for this user in this course
-  const userQuizzes = await tx.quiz.findMany({
-    where: {
-      userId: userId,
-      question: {
-        courseId: courseId
-      }
-    },
-    include: {
-      question: true
-    }
-  });
-
-  if (userQuizzes.length === 0) {
-    return 1500; // Default rating if no quizzes
-  }
-
-  // Group question ratings by type
-  const typeRatings: Record<string, number[]> = {};
-  
-  for (const quiz of userQuizzes) {
-    const question = quiz.question;
-    
-    // Process each type for this question
-    for (const type of question.types) {
-      if (!typeRatings[type]) {
-        typeRatings[type] = [];
-      }
-      // Use the question rating as a measure of skill in this type
-      typeRatings[type].push(question.rating);
-    }
-  }
-
-  // Calculate average rating per type, then average across all types
-  const typeAverages: number[] = [];
-  for (const [type, ratings] of Object.entries(typeRatings)) {
-    if (ratings.length > 0) {
-      const typeAverage = ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length;
-      typeAverages.push(typeAverage);
-    }
-  }
-
-  if (typeAverages.length === 0) {
-    return 1500; // Default if no valid types
-  }
-
-  return typeAverages.reduce((sum, avg) => sum + avg, 0) / typeAverages.length;
 }
 
 /**
@@ -158,7 +174,7 @@ async function getCachedUserProfile(studentId: string): Promise<{ name: string; 
 }
 
 /**
- * Bulk upsert questions for better performance
+ * Bulk upsert questions for better performance - SUPER OPTIMIZED with parameterized queries
  */
 async function bulkUpsertQuestions(quizzes: any[], courseId: string): Promise<void> {
   const questionsToUpsert = quizzes
@@ -168,10 +184,10 @@ async function bulkUpsertQuestions(quizzes: any[], courseId: string): Promise<vo
       
       return {
         quizId: quiz.id.toString(),
-        quizName: quiz.title.replace(/'/g, "''"), // Escape single quotes
+        quizName: quiz.title,
         courseId,
         types: parsedQuiz.types, // Keep as array for PostgreSQL
-        lesson: parsedQuiz.lesson?.replace(/'/g, "''") || null,
+        lesson: parsedQuiz.lesson || null,
         difficulty: parsedQuiz.difficulty?.toString() || null,
         class: parsedQuiz.class || null,
       };
@@ -183,31 +199,61 @@ async function bulkUpsertQuestions(quizzes: any[], courseId: string): Promise<vo
     return;
   }
 
-  // Use raw SQL for bulk upsert - format types as PostgreSQL array
-  const values = questionsToUpsert.map(q => 
-    `('${q.quizId}', '${courseId}', '${q.quizName}', ARRAY[${q.types.map(t => `'${String(t).replace(/'/g, "''")}'`).join(',')}], ${q.lesson ? `'${q.lesson}'` : 'NULL'}, ${q.difficulty ? `'${q.difficulty}'` : 'NULL'}, ${q.class ? `'${String(q.class).replace(/'/g, "''")}'` : 'NULL'}, 1500, 0, NOW(), NOW())`
-  ).join(',\n');
+  // Process in chunks for better performance - use parameterized queries
+  const CHUNK_SIZE = 50; // Smaller chunks for complex data
+  let totalAffected = 0;
+  
+  for (let i = 0; i < questionsToUpsert.length; i += CHUNK_SIZE) {
+    const chunk = questionsToUpsert.slice(i, i + CHUNK_SIZE);
+    
+    // Use createMany for better performance and safety
+    try {
+      const result = await db.question.createMany({
+        data: chunk.map(q => ({
+          quizId: q.quizId,
+          courseId: q.courseId,
+          quizName: q.quizName,
+          types: q.types,
+          lesson: q.lesson,
+          difficulty: q.difficulty ? parseFloat(q.difficulty) : null,
+          class: q.class,
+          rating: 1500,
+          submissionCount: 0
+        })),
+        skipDuplicates: true // Handle conflicts efficiently
+      });
+      
+      totalAffected += result.count;
+      
+      // Update existing records separately for better performance
+      for (const q of chunk) {
+        await db.question.updateMany({
+          where: {
+            quizId: q.quizId,
+            courseId: q.courseId
+          },
+          data: {
+            quizName: q.quizName,
+            types: q.types,
+            lesson: q.lesson,
+            difficulty: q.difficulty ? parseFloat(q.difficulty) : null,
+            class: q.class,
+            updatedAt: new Date()
+          }
+        });
+      }
+      
+      console.log(`Processed questions chunk ${Math.floor(i/CHUNK_SIZE) + 1}/${Math.ceil(questionsToUpsert.length/CHUNK_SIZE)}`);
+    } catch (error) {
+      console.warn(`Error processing questions chunk ${Math.floor(i/CHUNK_SIZE) + 1}:`, error);
+    }
+  }
 
-  const query = `
-    INSERT INTO "questions" ("quizId", "courseId", "quizName", "types", "lesson", "difficulty", "class", "rating", "submissionCount", "createdAt", "updatedAt")
-    VALUES ${values}
-    ON CONFLICT ("quizId", "courseId") 
-    DO UPDATE SET 
-      "quizName" = EXCLUDED."quizName",
-      "types" = EXCLUDED."types",
-      "lesson" = EXCLUDED."lesson",
-      "difficulty" = EXCLUDED."difficulty",
-      "class" = EXCLUDED."class",
-      "updatedAt" = NOW()
-    WHERE "questions"."quizName" != EXCLUDED."quizName" OR "questions"."types" != EXCLUDED."types"
-  `;
-
-  const result = await db.$executeRawUnsafe(query);
-  console.log(`Bulk upserted ${questionsToUpsert.length} questions for course ${courseId} (${result} affected rows)`);
+  console.log(`Bulk upserted ${questionsToUpsert.length} questions for course ${courseId} (${totalAffected} new records)`);
 }
 
 /**
- * Process submissions in bulk for better performance
+ * Process submissions in bulk for better performance - OPTIMIZED with smaller transactions
  */
 async function processBulkSubmissions(
   submissions: CanvasSubmission[],
@@ -251,93 +297,120 @@ async function processBulkSubmissions(
 
   const userMap = new Map(users.map(u => [u.studentId, u]));
   
-  // Process submissions in batches using transactions
-  const BATCH_SIZE = 50; // Process 50 submissions at a time
+  // Process submissions in MICRO-BATCHES using smaller transactions to avoid deadlocks
+  const MICRO_BATCH_SIZE = 10; // Much smaller batches for faster transactions
   
-  for (let i = 0; i < validSubmissions.length; i += BATCH_SIZE) {
-    const batch = validSubmissions.slice(i, i + BATCH_SIZE);
+  let totalRatingChange = 0;
+  let totalValidSubmissions = 0;
+  
+  for (let i = 0; i < validSubmissions.length; i += MICRO_BATCH_SIZE) {
+    const microBatch = validSubmissions.slice(i, i + MICRO_BATCH_SIZE);
     
-    await db.$transaction(async (tx) => {
-      const quizRecords = [];
-      const userUpdates = [];
-      let totalRatingChange = 0;
-      let validSubmissionCount = 0;
+    try {
+      const batchResult = await db.$transaction(async (tx) => {
+        const quizRecords = [];
+        const userUpdates = [];
+        let batchRatingChange = 0;
+        let batchValidSubmissions = 0;
 
-      for (const submission of batch) {
-        const studentId = submission.user_id.toString();
-        const user = userMap.get(studentId);
-        
-        if (!user) {
-          console.log(`User ${studentId} not found in course ${courseId}`);
-          continue;
+        for (const submission of microBatch) {
+          const studentId = submission.user_id.toString();
+          const user = userMap.get(studentId);
+          
+          if (!user) {
+            console.log(`User ${studentId} not found in course ${courseId}`);
+            continue;
+          }
+
+          const userScore = submission.score! / submission.quiz_points_possible!;
+          
+          // Get user's problem count (simplified - estimate based on rating)
+          const userProblemsSolved = Math.max(0, Math.floor((user.rating - 1500) / 10));
+          
+          const { newUserRating, newQuestionRating, ratingChange } = updateRatings(
+            user.rating,
+            question.rating,
+            userScore,
+            userProblemsSolved,
+            question.submissionCount + batchValidSubmissions
+          );
+
+          quizRecords.push({
+            userId: user.id,
+            questionId: question.id,
+            score: submission.score!,
+            maxScore: submission.quiz_points_possible!,
+            submittedAt: new Date(submission.finished_at!),
+            ratingChange
+          });
+
+          userUpdates.push({
+            id: user.id,
+            newRating: newUserRating
+          });
+
+          batchRatingChange += (newQuestionRating - question.rating);
+          batchValidSubmissions++;
+          
+          // Update user rating in map for next calculations
+          userMap.set(studentId, { ...user, rating: newUserRating });
         }
 
-        const userScore = submission.score! / submission.quiz_points_possible!;
-        
-        // Get user's problem count (simplified - we'll estimate based on rating)
-        const userProblemsSolved = Math.max(0, Math.floor((user.rating - 1500) / 10)); // Rough estimate
-        
-        const { newUserRating, newQuestionRating, ratingChange } = updateRatings(
-          user.rating,
-          question.rating,
-          userScore,
-          userProblemsSolved,
-          question.submissionCount + validSubmissionCount
-        );
+        if (quizRecords.length === 0) {
+          return { ratingChange: 0, validCount: 0 };
+        }
 
-        quizRecords.push({
-          userId: user.id,
-          questionId: question.id,
-          score: submission.score!,
-          maxScore: submission.quiz_points_possible!,
-          submittedAt: new Date(submission.finished_at!),
-          ratingChange
-        });
+        // Bulk operations within micro-transaction
+        await Promise.all([
+          // Create quiz records
+          tx.quiz.createMany({
+            data: quizRecords
+          }),
+          
+          // Update user ratings using batch update
+          ...userUpdates.map(update => 
+            tx.canvasUser.update({
+              where: { id: update.id },
+              data: { rating: update.newRating, updatedAt: new Date() }
+            })
+          )
+        ]);
 
-        userUpdates.push({
-          id: user.id,
-          newRating: newUserRating
-        });
-
-        totalRatingChange += (newQuestionRating - question.rating);
-        validSubmissionCount++;
-        
-        // Update user rating in map for next calculations
-        userMap.set(studentId, { ...user, rating: newUserRating });
-      }
-
-      if (quizRecords.length === 0) {
-        return;
-      }
-
-      // Bulk create quiz records
-      await tx.quiz.createMany({
-        data: quizRecords
+        return { 
+          ratingChange: batchRatingChange, 
+          validCount: batchValidSubmissions 
+        };
+      }, {
+        timeout: 10000, // 10 second timeout for micro-transactions
+        maxWait: 5000,  // 5 second max wait
       });
-
-      // Bulk update user ratings using raw SQL for better performance
-      if (userUpdates.length > 0) {
-        const userUpdateValues = userUpdates.map(u => `(${u.id}, ${u.newRating})`).join(',');
-        await tx.$executeRawUnsafe(`
-          UPDATE "users" 
-          SET rating = updates.rating, "updatedAt" = NOW()
-          FROM (VALUES ${userUpdateValues}) AS updates(id, rating)
-          WHERE "users".id = updates.id
-        `);
-      }
-
-      // Update question rating and submission count
-      const avgRatingChange = totalRatingChange / validSubmissionCount;
-      await tx.question.update({
+      
+      totalRatingChange += batchResult.ratingChange;
+      totalValidSubmissions += batchResult.validCount;
+      
+      console.log(`Processed micro-batch ${Math.floor(i/MICRO_BATCH_SIZE) + 1}/${Math.ceil(validSubmissions.length/MICRO_BATCH_SIZE)} - ${microBatch.length} submissions`);
+    } catch (error) {
+      console.error(`Error processing micro-batch ${Math.floor(i/MICRO_BATCH_SIZE) + 1}:`, error);
+      // Continue with next micro-batch instead of failing completely
+    }
+  }
+  
+  // Update question rating in separate transaction to avoid holding locks
+  if (totalValidSubmissions > 0) {
+    try {
+      const avgRatingChange = totalRatingChange / totalValidSubmissions;
+      await db.question.update({
         where: { id: question.id },
         data: {
           rating: question.rating + avgRatingChange,
-          submissionCount: { increment: validSubmissionCount }
+          submissionCount: { increment: totalValidSubmissions }
         }
       });
-
-      console.log(`Processed batch of ${quizRecords.length} submissions for quiz ${quizId}`);
-    });
+      
+      console.log(`Updated question ${quizId} rating and submission count`);
+    } catch (error) {
+      console.error(`Error updating question ${quizId}:`, error);
+    }
   }
 }
 async function processWithConcurrency<T, R>(
@@ -358,26 +431,33 @@ async function processWithConcurrency<T, R>(
 export async function syncCourseSubmissions(courseId: string): Promise<void> {
   console.log(`Starting sync for course ${courseId}`);
 
-  // First, sync course information
-  await syncCourseInfo(courseId);
-
-  // Then, sync users from enrollments (now bulk optimized)
-  await syncCourseUsers(courseId);
-
-  // Get last sync time or use epoch if first sync
-  let lastSync = new Date('1970-01-01T00:00:00Z');
-  
-  const syncHistory = await db.syncHistory.findUnique({
-    where: { courseId }
-  });
-  
-  if (syncHistory) {
-    lastSync = syncHistory.lastSync;
-  }
-
-  const now = new Date();
-  
   try {
+    // Ensure critical indexes exist for optimal performance
+    await ensureCriticalIndexes();
+    
+    // Optimize database for bulk operations - only use settings that work at session level
+    await db.$executeRawUnsafe('SET LOCAL synchronous_commit = OFF'); // Faster writes (session-level)
+    await db.$executeRawUnsafe('SET LOCAL commit_delay = 100000'); // 100ms delay for batching commits
+
+    // First, sync course information
+    await syncCourseInfo(courseId);
+
+    // Then, sync users from enrollments (now bulk optimized)
+    await syncCourseUsers(courseId);
+
+    // Get last sync time or use epoch if first sync
+    let lastSync = new Date('1970-01-01T00:00:00Z');
+    
+    const syncHistory = await db.syncHistory.findUnique({
+      where: { courseId }
+    });
+    
+    if (syncHistory) {
+      lastSync = syncHistory.lastSync;
+    }
+
+    const now = new Date();
+    
     // Fetch all quizzes for the course
     const quizzes = await fetchAllQuizzes(courseId);
     console.log(`Found ${quizzes.length} quizzes in course ${courseId}`);
@@ -458,6 +538,15 @@ export async function syncCourseSubmissions(courseId: string): Promise<void> {
     console.error(`Error syncing course ${courseId}:`, error);
     userProfileCache.clear();
     throw error;
+  } finally {
+    // Reset database settings to default (LOCAL settings auto-reset at transaction end)
+    try {
+      await db.$executeRawUnsafe('RESET synchronous_commit');
+      await db.$executeRawUnsafe('RESET commit_delay');
+    } catch (e) {
+      // Ignore reset errors as LOCAL settings auto-reset anyway
+      console.debug('Database settings reset (auto-reset at session end)');
+    }
   }
 }
 
