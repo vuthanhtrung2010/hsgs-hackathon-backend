@@ -71,14 +71,14 @@ async function syncCourseUsers(courseId: string): Promise<void> {
     ).join(',\n');
 
     const query = `
-      INSERT INTO "CanvasUser" ("studentId", "courseId", "name", "shortName", "rating", "createdAt", "updatedAt")
+      INSERT INTO "users" ("studentId", "courseId", "name", "shortName", "rating", "createdAt", "updatedAt")
       VALUES ${values}
       ON CONFLICT ("studentId", "courseId") 
       DO UPDATE SET 
         "name" = EXCLUDED."name",
         "shortName" = EXCLUDED."shortName",
         "updatedAt" = NOW()
-      WHERE "CanvasUser"."name" != EXCLUDED."name" OR "CanvasUser"."shortName" != EXCLUDED."shortName"
+      WHERE "users"."name" != EXCLUDED."name" OR "users"."shortName" != EXCLUDED."shortName"
     `;
 
     const result = await db.$executeRawUnsafe(query);
@@ -189,7 +189,7 @@ async function bulkUpsertQuestions(quizzes: any[], courseId: string): Promise<vo
   ).join(',\n');
 
   const query = `
-    INSERT INTO "Question" ("quizId", "courseId", "quizName", "types", "lesson", "difficulty", "class", "rating", "submissionCount", "createdAt", "updatedAt")
+    INSERT INTO "questions" ("quizId", "courseId", "quizName", "types", "lesson", "difficulty", "class", "rating", "submissionCount", "createdAt", "updatedAt")
     VALUES ${values}
     ON CONFLICT ("quizId", "courseId") 
     DO UPDATE SET 
@@ -199,7 +199,7 @@ async function bulkUpsertQuestions(quizzes: any[], courseId: string): Promise<vo
       "difficulty" = EXCLUDED."difficulty",
       "class" = EXCLUDED."class",
       "updatedAt" = NOW()
-    WHERE "Question"."quizName" != EXCLUDED."quizName" OR "Question"."types" != EXCLUDED."types"
+    WHERE "questions"."quizName" != EXCLUDED."quizName" OR "questions"."types" != EXCLUDED."types"
   `;
 
   const result = await db.$executeRawUnsafe(query);
@@ -236,7 +236,7 @@ async function processBulkSubmissions(
   const [users, question] = await Promise.all([
     db.$queryRawUnsafe<{id: number, studentId: string, rating: number}[]>(`
       SELECT id, "studentId", rating 
-      FROM "CanvasUser" 
+      FROM "users" 
       WHERE "studentId" = ANY($1::text[]) AND "courseId" = $2
     `, studentIds, courseId),
     db.question.findUnique({
@@ -319,10 +319,10 @@ async function processBulkSubmissions(
       if (userUpdates.length > 0) {
         const userUpdateValues = userUpdates.map(u => `(${u.id}, ${u.newRating})`).join(',');
         await tx.$executeRawUnsafe(`
-          UPDATE "CanvasUser" 
+          UPDATE "users" 
           SET rating = updates.rating, "updatedAt" = NOW()
           FROM (VALUES ${userUpdateValues}) AS updates(id, rating)
-          WHERE "CanvasUser".id = updates.id
+          WHERE "users".id = updates.id
         `);
       }
 
@@ -392,10 +392,10 @@ export async function syncCourseSubmissions(courseId: string): Promise<void> {
 
     // Get all existing submissions for this course in one query
     const existingSubmissions = await db.$queryRawUnsafe<{studentId: string, quizId: string}[]>(`
-      SELECT DISTINCT cu."studentId", q."quizId"
-      FROM "Quiz" quiz
-      JOIN "CanvasUser" cu ON quiz."userId" = cu.id
-      JOIN "Question" q ON quiz."questionId" = q.id
+      SELECT DISTINCT u."studentId", q."quizId"
+      FROM "quizzes" quiz
+      JOIN "users" u ON quiz."userId" = u.id
+      JOIN "questions" q ON quiz."questionId" = q.id
       WHERE q."courseId" = $1
     `, courseId);
 
