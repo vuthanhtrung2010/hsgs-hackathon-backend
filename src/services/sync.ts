@@ -294,6 +294,17 @@ async function processBulkSubmissions(
     return;
   }
 
+  // Sort submissions by finished_at timestamp (earliest first) for proper rating progression
+  validSubmissions.sort((a, b) => {
+    const timeA = new Date(a.finished_at!).getTime();
+    const timeB = new Date(b.finished_at!).getTime();
+    return timeA - timeB;
+  });
+  
+  console.log(`📅 Sorted ${validSubmissions.length} submissions by completion time (earliest first)`);
+  console.log(`   First submission: ${validSubmissions[0]?.finished_at}`);
+  console.log(`   Last submission: ${validSubmissions[validSubmissions.length - 1]?.finished_at}`);
+
   // Get all users and questions in batch
   const studentIds = validSubmissions.map(s => s.user_id.toString());
   const quizId = quiz.id.toString();
@@ -458,6 +469,7 @@ async function processWithConcurrency<T, R>(
   
   return results;
 }
+
 export async function syncCourseSubmissions(courseId: string): Promise<void> {
   console.log(`Starting sync for course ${courseId}`);
 
