@@ -170,7 +170,7 @@ async function bulkUpsertQuestions(quizzes: any[], courseId: string): Promise<vo
         quizId: quiz.id.toString(),
         quizName: quiz.title.replace(/'/g, "''"), // Escape single quotes
         courseId,
-        types: JSON.stringify(parsedQuiz.types), // Store as JSON string for raw SQL
+        types: parsedQuiz.types, // Keep as array for PostgreSQL
         lesson: parsedQuiz.lesson?.replace(/'/g, "''") || null,
         difficulty: parsedQuiz.difficulty?.toString() || null,
         class: parsedQuiz.class || null,
@@ -183,9 +183,9 @@ async function bulkUpsertQuestions(quizzes: any[], courseId: string): Promise<vo
     return;
   }
 
-  // Use raw SQL for bulk upsert
+  // Use raw SQL for bulk upsert - format types as PostgreSQL array
   const values = questionsToUpsert.map(q => 
-    `('${q.quizId}', '${courseId}', '${q.quizName}', '${q.types}', ${q.lesson ? `'${q.lesson}'` : 'NULL'}, ${q.difficulty ? `'${q.difficulty}'` : 'NULL'}, ${q.class || 'NULL'}, 1500, 0, NOW(), NOW())`
+    `('${q.quizId}', '${courseId}', '${q.quizName}', ARRAY[${q.types.map(t => `'${String(t).replace(/'/g, "''")}'`).join(',')}], ${q.lesson ? `'${q.lesson}'` : 'NULL'}, ${q.difficulty ? `'${q.difficulty}'` : 'NULL'}, ${q.class ? `'${String(q.class).replace(/'/g, "''")}'` : 'NULL'}, 1500, 0, NOW(), NOW())`
   ).join(',\n');
 
   const query = `
