@@ -40,7 +40,7 @@ export const problemRoutes = new Elysia({ prefix: '/api/problems' })
           course: {
             courseId: question.courseId,
             name: course?.name || `Course ${question.courseId}`,
-            canvasUrl: `${env.CANVAS_BASE_URL}/courses/${question.courseId}`
+            canvasUrl: `${env.CANVAS_BASE_URL}/courses/${question.courseId}/quizzes/${question.quizId}`
           },
           type: question.types, // Return the types array directly
           rating: Math.round(question.rating)
