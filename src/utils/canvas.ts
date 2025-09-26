@@ -35,42 +35,83 @@ export interface CanvasEnrollment {
   };
 }
 
+export interface CanvasUser {
+  id: number;
+  name: string;
+  created_at: string;
+  sortable_name: string;
+  short_name: string;
+  sis_user_id: string | null;
+  integration_id: string | null;
+  login_id: string;
+  email: string;
+}
+
 /**
  * Fetch all student enrollments for a course
  */
-export async function fetchCourseEnrollments(courseId: string): Promise<CanvasEnrollment[]> {
+// export async function fetchCourseEnrollments(courseId: string): Promise<CanvasEnrollment[]> {
+//   let page = 1;
+//   let allEnrollments: CanvasEnrollment[] = [];
+
+//   while (true) {
+//     const url = new URL(`/api/v1/courses/${courseId}/enrollments`, CANVAS_API_BASE_URL);
+//     url.searchParams.set('per_page', '100');
+//     url.searchParams.set('page', page.toString());
+//     url.searchParams.set('type[]', 'StudentEnrollment'); // Only fetch student enrollments
+    
+//     const response = await fetch(url.toString(), { headers });
+    
+//     if (!response.ok) {
+//       throw new Error(`Failed to fetch course enrollments: ${response.statusText}`);
+//     }
+
+//     const enrollments = await response.json() as CanvasEnrollment[];
+    
+//     // Filter for only active student enrollments
+//     const studentEnrollments = enrollments.filter(enrollment => 
+//       enrollment.type === 'StudentEnrollment' && 
+//       enrollment.role === 'StudentEnrollment' &&
+//       enrollment.enrollment_state === 'active'
+//     );
+    
+//     allEnrollments = allEnrollments.concat(studentEnrollments);
+
+//     const linkHeader = response.headers.get('link');
+//     if (!linkHeader || !linkHeader.includes('rel="next"')) break;
+//     page++;
+//   }
+
+//   return allEnrollments;
+// }
+
+/**
+ * Fetch all users from a specific course using /users endpoint
+ */
+export async function fetchAllUsersFromCourse(courseId: string): Promise<CanvasUser[]> {
   let page = 1;
-  let allEnrollments: CanvasEnrollment[] = [];
+  let allUsers: CanvasUser[] = [];
 
   while (true) {
-    const url = new URL(`/api/v1/courses/${courseId}/enrollments`, CANVAS_API_BASE_URL);
+    const url = new URL(`/api/v1/courses/${courseId}/users`, CANVAS_API_BASE_URL);
     url.searchParams.set('per_page', '100');
     url.searchParams.set('page', page.toString());
-    url.searchParams.set('type[]', 'StudentEnrollment'); // Only fetch student enrollments
     
     const response = await fetch(url.toString(), { headers });
     
     if (!response.ok) {
-      throw new Error(`Failed to fetch course enrollments: ${response.statusText}`);
+      throw new Error(`Failed to fetch course users: ${response.statusText}`);
     }
 
-    const enrollments = await response.json() as CanvasEnrollment[];
-    
-    // Filter for only active student enrollments
-    const studentEnrollments = enrollments.filter(enrollment => 
-      enrollment.type === 'StudentEnrollment' && 
-      enrollment.role === 'StudentEnrollment' &&
-      enrollment.enrollment_state === 'active'
-    );
-    
-    allEnrollments = allEnrollments.concat(studentEnrollments);
+    const users = await response.json() as CanvasUser[];
+    allUsers = allUsers.concat(users);
 
     const linkHeader = response.headers.get('link');
     if (!linkHeader || !linkHeader.includes('rel="next"')) break;
     page++;
   }
 
-  return allEnrollments;
+  return allUsers;
 }
 
 /**

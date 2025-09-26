@@ -1,5 +1,5 @@
 import { db } from '../db.js';
-import { fetchAllQuizzes, fetchAllUpdatedSubmissions, fetchUserProfile, fetchAllCourses, fetchCourseEnrollments } from '../utils/canvas.js';
+import { fetchAllQuizzes, fetchAllUpdatedSubmissions, fetchUserProfile, fetchAllCourses, fetchAllUsersFromCourse } from '../utils/canvas.js';
 import { parseQuiz, type ParsedQuiz } from '../utils/parseQuiz.js';
 import { updateRatings } from '../utils/elo.js';
 import { env } from '../env.js';
@@ -100,12 +100,12 @@ async function syncCourseUsers(courseId: string): Promise<void> {
   console.log(`Starting user sync for course ${courseId}`);
   
   try {
-    // Fetch student enrollments from Canvas
-    const enrollments = await fetchCourseEnrollments(courseId);
-    console.log(`Found ${enrollments.length} student enrollments in course ${courseId}`);
+    // Fetch all users from Canvas course
+    const users = await fetchAllUsersFromCourse(courseId);
+    console.log(`Found ${users.length} users in course ${courseId}`);
 
-    if (enrollments.length === 0) {
-      console.log(`No enrollments found for course ${courseId}`);
+    if (users.length === 0) {
+      console.log(`No users found for course ${courseId}`);
       return;
     }
 
@@ -113,17 +113,25 @@ async function syncCourseUsers(courseId: string): Promise<void> {
     const CHUNK_SIZE = 100; // Optimal chunk size for PostgreSQL
     let totalAffected = 0;
     
-    for (let i = 0; i < enrollments.length; i += CHUNK_SIZE) {
-      const chunk = enrollments.slice(i, i + CHUNK_SIZE);
+    console.log(`📊 Processing ${users.length} users in chunks of ${CHUNK_SIZE}...`);
+    
+    for (let i = 0; i < users.length; i += CHUNK_SIZE) {
+      const chunk = users.slice(i, i + CHUNK_SIZE);
+      const chunkNum = Math.floor(i/CHUNK_SIZE) + 1;
+      const totalChunks = Math.ceil(users.length/CHUNK_SIZE);
+      
+      console.log(`⏳ Processing user chunk ${chunkNum}/${totalChunks} (${chunk.length} users)...`);
+      
+      const startTime = Date.now();
       
     // Use createMany for better performance and safety
     try {
       const result = await db.canvasUser.createMany({
-        data: chunk.map(enrollment => ({
-          studentId: enrollment.user_id.toString(),
+        data: chunk.map((user) => ({
+          studentId: user.id.toString(),
           courseId: courseId,
-          name: enrollment.user.name,
-          shortName: enrollment.user.short_name,
+          name: user.name,
+          shortName: user.short_name,
           rating: 1500
         })),
         skipDuplicates: true // Handle conflicts efficiently
@@ -132,27 +140,29 @@ async function syncCourseUsers(courseId: string): Promise<void> {
       totalAffected += result.count;
       
       // Update existing records separately for better performance
-      for (const enrollment of chunk) {
+      for (const user of chunk) {
         await db.canvasUser.updateMany({
           where: {
-            studentId: enrollment.user_id.toString(),
+            studentId: user.id.toString(),
             courseId: courseId
           },
           data: {
-            name: enrollment.user.name,
-            shortName: enrollment.user.short_name,
+            name: user.name,
+            shortName: user.short_name,
             updatedAt: new Date()
           }
         });
       }
       
-      console.log(`Processed chunk ${Math.floor(i/CHUNK_SIZE) + 1}/${Math.ceil(enrollments.length/CHUNK_SIZE)} - ${chunk.length} users`);
+      const duration = Date.now() - startTime;
+      console.log(`✅ Chunk ${chunkNum}/${totalChunks} completed in ${duration}ms (${result.count} new users)`);
     } catch (error) {
-      console.warn(`Error processing user chunk ${Math.floor(i/CHUNK_SIZE) + 1}:`, error);
+      const duration = Date.now() - startTime;
+      console.warn(`❌ Error processing user chunk ${chunkNum}/${totalChunks} after ${duration}ms:`, error);
     }
     }
 
-    console.log(`Bulk upserted ${enrollments.length} users for course ${courseId} (${totalAffected} affected rows)`);
+    console.log(`Bulk upserted ${users.length} users for course ${courseId} (${totalAffected} affected rows)`);
     console.log(`User sync completed for course ${courseId}`);
   } catch (error) {
     console.error(`Error syncing users for course ${courseId}:`, error);
@@ -203,8 +213,16 @@ async function bulkUpsertQuestions(quizzes: any[], courseId: string): Promise<vo
   const CHUNK_SIZE = 50; // Smaller chunks for complex data
   let totalAffected = 0;
   
+  console.log(`📊 Processing ${questionsToUpsert.length} questions in chunks of ${CHUNK_SIZE}...`);
+  
   for (let i = 0; i < questionsToUpsert.length; i += CHUNK_SIZE) {
     const chunk = questionsToUpsert.slice(i, i + CHUNK_SIZE);
+    const chunkNum = Math.floor(i/CHUNK_SIZE) + 1;
+    const totalChunks = Math.ceil(questionsToUpsert.length/CHUNK_SIZE);
+    
+    console.log(`⏳ Processing questions chunk ${chunkNum}/${totalChunks} (${chunk.length} questions)...`);
+    
+    const startTime = Date.now();
     
     // Use createMany for better performance and safety
     try {
@@ -243,9 +261,11 @@ async function bulkUpsertQuestions(quizzes: any[], courseId: string): Promise<vo
         });
       }
       
-      console.log(`Processed questions chunk ${Math.floor(i/CHUNK_SIZE) + 1}/${Math.ceil(questionsToUpsert.length/CHUNK_SIZE)}`);
+      const duration = Date.now() - startTime;
+      console.log(`✅ Questions chunk ${chunkNum}/${totalChunks} completed in ${duration}ms (${result.count} new questions)`);
     } catch (error) {
-      console.warn(`Error processing questions chunk ${Math.floor(i/CHUNK_SIZE) + 1}:`, error);
+      const duration = Date.now() - startTime;
+      console.warn(`❌ Error processing questions chunk ${chunkNum}/${totalChunks} after ${duration}ms:`, error);
     }
   }
 
@@ -303,8 +323,16 @@ async function processBulkSubmissions(
   let totalRatingChange = 0;
   let totalValidSubmissions = 0;
   
+  console.log(`📊 Processing ${validSubmissions.length} submissions in micro-batches of ${MICRO_BATCH_SIZE}...`);
+  
   for (let i = 0; i < validSubmissions.length; i += MICRO_BATCH_SIZE) {
     const microBatch = validSubmissions.slice(i, i + MICRO_BATCH_SIZE);
+    const batchNum = Math.floor(i/MICRO_BATCH_SIZE) + 1;
+    const totalBatches = Math.ceil(validSubmissions.length/MICRO_BATCH_SIZE);
+    
+    console.log(`⏳ Processing submission micro-batch ${batchNum}/${totalBatches} (${microBatch.length} submissions)...`);
+    
+    const startTime = Date.now();
     
     try {
       const batchResult = await db.$transaction(async (tx) => {
@@ -388,9 +416,11 @@ async function processBulkSubmissions(
       totalRatingChange += batchResult.ratingChange;
       totalValidSubmissions += batchResult.validCount;
       
-      console.log(`Processed micro-batch ${Math.floor(i/MICRO_BATCH_SIZE) + 1}/${Math.ceil(validSubmissions.length/MICRO_BATCH_SIZE)} - ${microBatch.length} submissions`);
+      const duration = Date.now() - startTime;
+      console.log(`✅ Micro-batch ${batchNum}/${totalBatches} completed in ${duration}ms (${batchResult.validCount} submissions)`);
     } catch (error) {
-      console.error(`Error processing micro-batch ${Math.floor(i/MICRO_BATCH_SIZE) + 1}:`, error);
+      const duration = Date.now() - startTime;
+      console.error(`❌ Error processing micro-batch ${batchNum}/${totalBatches} after ${duration}ms:`, error);
       // Continue with next micro-batch instead of failing completely
     }
   }
@@ -487,26 +517,34 @@ export async function syncCourseSubmissions(courseId: string): Promise<void> {
 
     // Process quizzes in batches for better performance
     const QUIZ_BATCH_SIZE = 10; // Process 10 quizzes at a time
+    console.log(`📊 Processing ${quizzes.length} quizzes in batches of ${QUIZ_BATCH_SIZE}...`);
+    
     for (let i = 0; i < quizzes.length; i += QUIZ_BATCH_SIZE) {
       const quizBatch = quizzes.slice(i, i + QUIZ_BATCH_SIZE);
+      const batchNum = Math.floor(i/QUIZ_BATCH_SIZE) + 1;
+      const totalBatches = Math.ceil(quizzes.length/QUIZ_BATCH_SIZE);
+      
+      console.log(`⏳ Processing quiz batch ${batchNum}/${totalBatches} (${quizBatch.length} quizzes)...`);
+      const batchStartTime = Date.now();
       
       await Promise.all(quizBatch.map(async (quiz) => {
         const parsedQuiz = parseQuiz(quiz.title);
         if (!parsedQuiz) {
-          console.log(`Skipping quiz "${quiz.title}" - no cluster found`);
+          console.log(`⏭️  Skipping quiz "${quiz.title}" - no cluster found`);
           return;
         }
 
-        console.log(`Processing quiz: ${quiz.title} (Types: [${parsedQuiz.types.join(', ')}])`);
+        console.log(`🔍 Processing quiz: ${quiz.title} (Types: [${parsedQuiz.types.join(', ')}])`);
 
         // Fetch updated submissions since last sync
         const submissions = await fetchAllUpdatedSubmissions(courseId, quiz.id.toString(), lastSync);
         
         if (!submissions.length) {
+          console.log(`⏭️  No submissions found for quiz ${quiz.id}`);
           return;
         }
 
-        console.log(`Found ${submissions.length} submissions for quiz ${quiz.id}`);
+        console.log(`📝 Found ${submissions.length} submissions for quiz ${quiz.id}`);
 
         // Filter out existing submissions
         const newSubmissions = submissions.filter(submission => {
@@ -521,6 +559,9 @@ export async function syncCourseSubmissions(courseId: string): Promise<void> {
           await processBulkSubmissions(newSubmissions, quiz, parsedQuiz, courseId);
         }
       }));
+      
+      const batchDuration = Date.now() - batchStartTime;
+      console.log(`✅ Quiz batch ${batchNum}/${totalBatches} completed in ${batchDuration}ms`);
     }
 
     // Update sync history
