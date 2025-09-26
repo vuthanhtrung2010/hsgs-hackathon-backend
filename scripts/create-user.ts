@@ -1,20 +1,22 @@
 #!/usr/bin/env bun
 
-import { PrismaClient } from '@prisma/client';
-import { auth } from '../src/auth.js';
+import { PrismaClient } from "@prisma/client";
+import { auth } from "../src/auth.js";
 
 const prisma = new PrismaClient();
 
 async function createUser() {
-  console.log('🔧 User Creation Script');
-  console.log('======================\n');
+  console.log("🔧 User Creation Script");
+  console.log("======================\n");
 
   // Get user input from command line arguments
   const args = process.argv.slice(2);
-  
+
   if (args.length < 3) {
-    console.log('Usage: bun scripts/create-user.ts <name> <email> <password>');
-    console.log('Example: bun scripts/create-user.ts "John Doe" "john@example.com" "password123"');
+    console.log("Usage: bun scripts/create-user.ts <name> <email> <password>");
+    console.log(
+      'Example: bun scripts/create-user.ts "John Doe" "john@example.com" "password123"',
+    );
     process.exit(1);
   }
 
@@ -25,7 +27,7 @@ async function createUser() {
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
-      where: { email }
+      where: { email },
     });
 
     if (existingUser) {
@@ -39,22 +41,23 @@ async function createUser() {
         name,
         email,
         password,
-      }
+      },
     });
 
     if (result) {
-      console.log('✅ User created successfully!');
+      console.log("✅ User created successfully!");
       console.log(`   Name: ${name}`);
       console.log(`   Email: ${email}`);
       console.log(`   User ID: ${result.user.id}`);
-      console.log('\n💡 The user can now log in using the frontend login page.');
+      console.log(
+        "\n💡 The user can now log in using the frontend login page.",
+      );
     } else {
-      console.error('❌ Failed to create user');
+      console.error("❌ Failed to create user");
       process.exit(1);
     }
-
   } catch (error) {
-    console.error('❌ Error creating user:', error);
+    console.error("❌ Error creating user:", error);
     process.exit(1);
   } finally {
     await prisma.$disconnect();
@@ -63,6 +66,6 @@ async function createUser() {
 
 // Run the script
 createUser().catch((error) => {
-  console.error('❌ Script failed:', error);
+  console.error("❌ Script failed:", error);
   process.exit(1);
 });

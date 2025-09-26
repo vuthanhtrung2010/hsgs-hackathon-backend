@@ -16,6 +16,7 @@ export interface Course {
   }[];
   recommendations?: Recommendations[];
   clusters: Record<string, any>; // Keep for compatibility but simplified
+  quizzesCompleted?: number; // Number of quizzes completed by user in this course
 }
 
 export interface IUserData {
@@ -35,6 +36,7 @@ export interface IUsersListData {
     courseId: string;
     courseName: string;
     rating: number;
+    quizzesCompleted?: number; // Number of completed quizzes
   }[];
 }
 

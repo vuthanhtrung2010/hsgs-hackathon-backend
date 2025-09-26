@@ -1,102 +1,106 @@
-import { Elysia } from 'elysia';
-import { syncCourseSubmissions, syncAllCourses } from '../services/sync.js';
-import { env } from '../env.js';
+import { Elysia } from "elysia";
+import { syncCourseSubmissions, syncAllCourses } from "../services/sync.js";
+import { env } from "../env.js";
 
-export const syncRoutes = new Elysia({ prefix: '/api/sync' })
-  .post('/', async ({ body }: { body: any }) => {
+export const syncRoutes = new Elysia({ prefix: "/api/sync" })
+  .post("/", async ({ body }: { body: any }) => {
     try {
       const { password, courseId } = body;
 
       // Check sync password
       if (password !== env.SYNC_PASSWORD) {
-        return { 
-          error: 'Unauthorized',
-          status: 401 
+        return {
+          error: "Unauthorized",
+          status: 401,
         };
       }
 
       const targetCourseId = courseId;
-      
+
       if (!targetCourseId) {
-        return { 
-          error: 'Course ID is required',
-          status: 400 
+        return {
+          error: "Course ID is required",
+          status: 400,
         };
       }
 
       console.log(`Manual sync requested for course: ${targetCourseId}`);
-      
+
       await syncCourseSubmissions(targetCourseId);
-      
-      return { 
-        success: true, 
+
+      return {
+        success: true,
         message: `Sync completed for course ${targetCourseId}`,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     } catch (error) {
-      console.error('Manual sync error:', error);
-      return { 
-        error: 'Sync failed', 
-        details: error instanceof Error ? error.message : 'Unknown error',
-        status: 500
+      console.error("Manual sync error:", error);
+      return {
+        error: "Sync failed",
+        details: error instanceof Error ? error.message : "Unknown error",
+        status: 500,
       };
     }
   })
 
-  .get('/status/:courseId', async ({ params: { courseId } }) => {
+  .get("/status/:courseId", async ({ params: { courseId } }) => {
     try {
-      const syncHistory = await import('../db.js').then(m => m.db.syncHistory.findUnique({
-        where: { courseId }
-      }));
+      const syncHistory = await import("../db.js").then((m) =>
+        m.db.syncHistory.findUnique({
+          where: { courseId },
+        }),
+      );
 
       if (!syncHistory) {
         return {
           courseId,
           lastSync: null,
-          status: 'Never synced'
+          status: "Never synced",
         };
       }
 
       return {
         courseId,
         lastSync: syncHistory.lastSync.toISOString(),
-        status: 'Synced'
+        status: "Synced",
       };
     } catch (error) {
-      console.error('Error getting sync status:', error);
-      return { 
-        error: 'Failed to get sync status',
-        status: 500 
+      console.error("Error getting sync status:", error);
+      return {
+        error: "Failed to get sync status",
+        status: 500,
       };
     }
   })
 
-  .post('/all', async ({ body }: { body: any }) => {
+  .post("/all", async ({ body }: { body: any }) => {
     try {
       const { password } = body;
 
       // Check sync password
       if (password !== env.SYNC_PASSWORD) {
-        return { 
-          error: 'Unauthorized',
-          status: 401 
+        return {
+          error: "Unauthorized",
+          status: 401,
         };
       }
 
-      console.log('Manual sync requested for all courses');
-      
+      console.log("Manual sync requested for all courses");
+
       const result = await syncAllCourses();
-      
-      return { 
+
+      return {
         message: result.message,
         success: result.success,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     } catch (error) {
-      console.error('Sync error:', error);
-      return { 
-        error: 'Sync failed: ' + (error instanceof Error ? error.message : 'Unknown error'),
-        status: 500 
+      console.error("Sync error:", error);
+      return {
+        error:
+          "Sync failed: " +
+          (error instanceof Error ? error.message : "Unknown error"),
+        status: 500,
       };
     }
   });

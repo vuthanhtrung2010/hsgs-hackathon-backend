@@ -1,6 +1,6 @@
-import { db } from '../db.js';
-import { type Recommendations } from '../types.js';
-import { env } from '../env.js';
+import { db } from "../db.js";
+import { type Recommendations } from "../types.js";
+import { env } from "../env.js";
 
 /**
  * Get problem recommendations for a user in a specific course
@@ -9,23 +9,23 @@ import { env } from '../env.js';
 export async function getRecommendationsForUser(
   studentId: string,
   courseId: string,
-  count: number = 3
+  count: number = 3,
 ): Promise<Recommendations[]> {
   // Get user's current rating in this course
   const user = await db.canvasUser.findUnique({
     where: {
       studentId_courseId: {
         studentId,
-        courseId
-      }
+        courseId,
+      },
     },
     include: {
       quizzes: {
         include: {
-          question: true
-        }
-      }
-    }
+          question: true,
+        },
+      },
+    },
   });
 
   const userRating = user?.rating || 1500;
@@ -36,13 +36,13 @@ export async function getRecommendationsForUser(
     where: {
       courseId,
       quizId: {
-        notIn: solvedQuizIds
-      }
+        notIn: solvedQuizIds,
+      },
     },
     orderBy: {
-      rating: 'asc'
+      rating: "asc",
     },
-    take: count * 3 // Get more than needed for better filtering
+    take: count * 3, // Get more than needed for better filtering
   });
 
   if (!unsolvedQuestions.length) {
@@ -54,7 +54,7 @@ export async function getRecommendationsForUser(
   const sortedQuestions = unsolvedQuestions
     .map((question: any) => ({
       question,
-      ratingDiff: Math.abs(question.rating - targetRating)
+      ratingDiff: Math.abs(question.rating - targetRating),
     }))
     .sort((a: any, b: any) => a.ratingDiff - b.ratingDiff)
     .slice(0, count);
@@ -63,7 +63,7 @@ export async function getRecommendationsForUser(
     quizId: question.quizId,
     quizName: question.lesson || question.quizName, // Use lesson (clean name) or fallback to quizName
     rating: Math.round(question.rating),
-    canvasUrl: `${env.CANVAS_BASE_URL}/courses/${courseId}/quizzes/${question.quizId}`
+    canvasUrl: `${env.CANVAS_BASE_URL}/courses/${courseId}/quizzes/${question.quizId}`,
   }));
 }
 
@@ -74,25 +74,25 @@ export async function getRecommendationsForUser(
 export async function getBalancedRecommendationsForUser(
   studentId: string,
   courseId: string,
-  totalCount: number = 4
+  totalCount: number = 4,
 ): Promise<Recommendations[]> {
   // Get user's solved quiz IDs
   const users = await db.canvasUser.findMany({
     where: {
       studentId,
-      courseId
+      courseId,
     },
     include: {
       quizzes: {
         include: {
-          question: true
-        }
-      }
-    }
+          question: true,
+        },
+      },
+    },
   });
 
   const solvedQuizIds = users.flatMap((user: any) =>
-    user.quizzes.map((q: any) => q.question.quizId)
+    user.quizzes.map((q: any) => q.question.quizId),
   );
 
   // Get user's rating
@@ -103,10 +103,10 @@ export async function getBalancedRecommendationsForUser(
     where: {
       courseId,
       quizId: {
-        notIn: solvedQuizIds
-      }
+        notIn: solvedQuizIds,
+      },
     },
-    take: totalCount * 2 // Get more for better selection
+    take: totalCount * 2, // Get more for better selection
   });
 
   if (!unsolvedQuestions.length) {
@@ -118,7 +118,7 @@ export async function getBalancedRecommendationsForUser(
   const sortedQuestions = unsolvedQuestions
     .map((question: any) => ({
       question,
-      ratingDiff: Math.abs(question.rating - targetRating)
+      ratingDiff: Math.abs(question.rating - targetRating),
     }))
     .sort((a: any, b: any) => a.ratingDiff - b.ratingDiff)
     .slice(0, totalCount);
@@ -127,6 +127,6 @@ export async function getBalancedRecommendationsForUser(
     quizId: question.quizId,
     quizName: question.lesson || question.quizName, // Use lesson (clean name) or fallback to quizName
     rating: Math.round(question.rating),
-    canvasUrl: `${env.CANVAS_BASE_URL}/courses/${courseId}/quizzes/${question.quizId}`
+    canvasUrl: `${env.CANVAS_BASE_URL}/courses/${courseId}/quizzes/${question.quizId}`,
   }));
 }

@@ -1,12 +1,12 @@
-import type { CanvasQuiz, CanvasSubmission } from '../types.js';
-import { env } from '../env.js';
+import type { CanvasQuiz, CanvasSubmission } from "../types.js";
+import { env } from "../env.js";
 
 const CANVAS_API_BASE_URL = env.CANVAS_BASE_URL;
 const CANVAS_API_KEY = env.CANVAS_ACCESS_TOKEN;
 
 const headers = {
-  'Authorization': `Bearer ${CANVAS_API_KEY}`,
-  'Content-Type': 'application/json'
+  Authorization: `Bearer ${CANVAS_API_KEY}`,
+  "Content-Type": "application/json",
 };
 
 export interface CanvasEnrollment {
@@ -59,22 +59,22 @@ export interface CanvasUser {
 //     url.searchParams.set('per_page', '100');
 //     url.searchParams.set('page', page.toString());
 //     url.searchParams.set('type[]', 'StudentEnrollment'); // Only fetch student enrollments
-    
+
 //     const response = await fetch(url.toString(), { headers });
-    
+
 //     if (!response.ok) {
 //       throw new Error(`Failed to fetch course enrollments: ${response.statusText}`);
 //     }
 
 //     const enrollments = await response.json() as CanvasEnrollment[];
-    
+
 //     // Filter for only active student enrollments
-//     const studentEnrollments = enrollments.filter(enrollment => 
-//       enrollment.type === 'StudentEnrollment' && 
+//     const studentEnrollments = enrollments.filter(enrollment =>
+//       enrollment.type === 'StudentEnrollment' &&
 //       enrollment.role === 'StudentEnrollment' &&
 //       enrollment.enrollment_state === 'active'
 //     );
-    
+
 //     allEnrollments = allEnrollments.concat(studentEnrollments);
 
 //     const linkHeader = response.headers.get('link');
@@ -88,25 +88,30 @@ export interface CanvasUser {
 /**
  * Fetch all users from a specific course using /users endpoint
  */
-export async function fetchAllUsersFromCourse(courseId: string): Promise<CanvasUser[]> {
+export async function fetchAllUsersFromCourse(
+  courseId: string,
+): Promise<CanvasUser[]> {
   let page = 1;
   let allUsers: CanvasUser[] = [];
 
   while (true) {
-    const url = new URL(`/api/v1/courses/${courseId}/users`, CANVAS_API_BASE_URL);
-    url.searchParams.set('per_page', '100');
-    url.searchParams.set('page', page.toString());
-    
+    const url = new URL(
+      `/api/v1/courses/${courseId}/users`,
+      CANVAS_API_BASE_URL,
+    );
+    url.searchParams.set("per_page", "100");
+    url.searchParams.set("page", page.toString());
+
     const response = await fetch(url.toString(), { headers });
-    
+
     if (!response.ok) {
       throw new Error(`Failed to fetch course users: ${response.statusText}`);
     }
 
-    const users = await response.json() as CanvasUser[];
+    const users = (await response.json()) as CanvasUser[];
     allUsers = allUsers.concat(users);
 
-    const linkHeader = response.headers.get('link');
+    const linkHeader = response.headers.get("link");
     if (!linkHeader || !linkHeader.includes('rel="next"')) break;
     page++;
   }
@@ -117,32 +122,38 @@ export async function fetchAllUsersFromCourse(courseId: string): Promise<CanvasU
 /**
  * Fetch all active courses for the current user
  */
-export async function fetchAllCourses(): Promise<Array<{ id: string; name: string; course_code: string }>> {
+export async function fetchAllCourses(): Promise<
+  Array<{ id: string; name: string; course_code: string }>
+> {
   let page = 1;
   let allCourses: Array<{ id: string; name: string; course_code: string }> = [];
 
   while (true) {
-    const url = new URL('/api/v1/courses', CANVAS_API_BASE_URL);
-    url.searchParams.set('per_page', '100');
-    url.searchParams.set('page', page.toString());
-    url.searchParams.set('enrollment_state', 'active');
-    
+    const url = new URL("/api/v1/courses", CANVAS_API_BASE_URL);
+    url.searchParams.set("per_page", "100");
+    url.searchParams.set("page", page.toString());
+    url.searchParams.set("enrollment_state", "active");
+
     const response = await fetch(url.toString(), { headers });
-    
+
     if (!response.ok) {
       throw new Error(`Failed to fetch courses: ${response.statusText}`);
     }
 
-    const courses = await response.json() as Array<{ id: number; name: string; course_code: string }>;
+    const courses = (await response.json()) as Array<{
+      id: number;
+      name: string;
+      course_code: string;
+    }>;
     // Convert id to string to match our database schema
-    const formattedCourses = courses.map(course => ({
+    const formattedCourses = courses.map((course) => ({
       id: course.id.toString(),
       name: course.name,
-      course_code: course.course_code
+      course_code: course.course_code,
     }));
     allCourses = allCourses.concat(formattedCourses);
 
-    const linkHeader = response.headers.get('link');
+    const linkHeader = response.headers.get("link");
     if (!linkHeader || !linkHeader.includes('rel="next"')) break;
     page++;
   }
@@ -158,20 +169,23 @@ export async function fetchAllQuizzes(courseId: string): Promise<CanvasQuiz[]> {
   let allQuizzes: CanvasQuiz[] = [];
 
   while (true) {
-    const url = new URL(`/api/v1/courses/${courseId}/quizzes`, CANVAS_API_BASE_URL);
-    url.searchParams.set('per_page', '100');
-    url.searchParams.set('page', page.toString());
-    
+    const url = new URL(
+      `/api/v1/courses/${courseId}/quizzes`,
+      CANVAS_API_BASE_URL,
+    );
+    url.searchParams.set("per_page", "100");
+    url.searchParams.set("page", page.toString());
+
     const response = await fetch(url.toString(), { headers });
-    
+
     if (!response.ok) {
       throw new Error(`Failed to fetch quizzes: ${response.statusText}`);
     }
 
-    const quizzes = await response.json() as CanvasQuiz[];
+    const quizzes = (await response.json()) as CanvasQuiz[];
     allQuizzes = allQuizzes.concat(quizzes);
 
-    const linkHeader = response.headers.get('link');
+    const linkHeader = response.headers.get("link");
     if (!linkHeader || !linkHeader.includes('rel="next"')) break;
     page++;
   }
@@ -185,28 +199,31 @@ export async function fetchAllQuizzes(courseId: string): Promise<CanvasQuiz[]> {
 export async function fetchAllUpdatedSubmissions(
   courseId: string,
   quizId: string,
-  lastSync: Date
+  lastSync: Date,
 ): Promise<CanvasSubmission[]> {
   let page = 1;
   let allSubmissions: CanvasSubmission[] = [];
 
   while (true) {
-    const url = new URL(`/api/v1/courses/${courseId}/quizzes/${quizId}/submissions`, CANVAS_API_BASE_URL);
-    url.searchParams.set('per_page', '100');
-    url.searchParams.set('page', page.toString());
-    url.searchParams.set('updated_since', lastSync.toISOString());
-    
+    const url = new URL(
+      `/api/v1/courses/${courseId}/quizzes/${quizId}/submissions`,
+      CANVAS_API_BASE_URL,
+    );
+    url.searchParams.set("per_page", "100");
+    url.searchParams.set("page", page.toString());
+    url.searchParams.set("updated_since", lastSync.toISOString());
+
     const response = await fetch(url.toString(), { headers });
-    
+
     if (!response.ok) {
       throw new Error(`Failed to fetch submissions: ${response.statusText}`);
     }
 
-    const data = await response.json() as any;
+    const data = (await response.json()) as any;
     const submissions = data.quiz_submissions || [];
     allSubmissions = allSubmissions.concat(submissions);
 
-    const linkHeader = response.headers.get('link');
+    const linkHeader = response.headers.get("link");
     if (!linkHeader || !linkHeader.includes('rel="next"')) break;
     page++;
   }
@@ -217,20 +234,24 @@ export async function fetchAllUpdatedSubmissions(
 /**
  * Get user profile from Canvas
  */
-export async function fetchUserProfile(userId: string): Promise<{ name: string; short_name: string }> {
+export async function fetchUserProfile(
+  userId: string,
+): Promise<{ name: string; short_name: string }> {
   const url = new URL(`/api/v1/users/${userId}/profile`, CANVAS_API_BASE_URL);
-  
+
   const response = await fetch(url.toString(), { headers });
-  
+
   if (!response.ok) {
-    console.warn(`Failed to fetch user profile for ${userId}: ${response.statusText}`);
+    console.warn(
+      `Failed to fetch user profile for ${userId}: ${response.statusText}`,
+    );
     return { name: "", short_name: "" };
   }
 
-  const profile = await response.json() as any;
+  const profile = (await response.json()) as any;
   return {
     name: profile.name || "",
-    short_name: profile.short_name || ""
+    short_name: profile.short_name || "",
   };
 }
 
@@ -239,15 +260,15 @@ export async function fetchUserProfile(userId: string): Promise<{ name: string; 
  */
 export async function fetchUserAvatar(userId: string): Promise<string> {
   const url = new URL(`/api/v1/users/${userId}/avatars`, CANVAS_API_BASE_URL);
-  
+
   try {
     const response = await fetch(url.toString(), { headers });
-    
+
     if (!response.ok) {
       throw new Error(`Failed to fetch avatar: ${response.statusText}`);
     }
 
-    const avatarData = await response.json() as any;
+    const avatarData = (await response.json()) as any;
     return avatarData[0]?.url || "";
   } catch (error) {
     console.warn(`Failed to fetch avatar for user ${userId}:`, error);

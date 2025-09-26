@@ -4,7 +4,10 @@
  * @param questionRating - Current question rating
  * @returns Expected score between 0 and 1
  */
-export function expectedScore(userRating: number, questionRating: number): number {
+export function expectedScore(
+  userRating: number,
+  questionRating: number,
+): number {
   return 1 / (1 + Math.pow(10, (questionRating - userRating) / 400));
 }
 
@@ -40,19 +43,19 @@ export function updateRatings(
   questionRating: number,
   userScore: number,
   userProblemsCount: number,
-  questionSubmissions: number
+  questionSubmissions: number,
 ): { newUserRating: number; newQuestionRating: number; ratingChange: number } {
   const expected = expectedScore(userRating, questionRating);
   const userK = userKFactor(userProblemsCount);
   const questionK = questionKFactor(questionSubmissions);
-  
+
   const ratingChange = userK * (userScore - expected);
   const newUserRating = userRating + ratingChange;
   const newQuestionRating = questionRating + questionK * (expected - userScore);
-  
+
   return {
     newUserRating,
     newQuestionRating,
-    ratingChange
+    ratingChange,
   };
 }

@@ -76,16 +76,20 @@ The server will start on `http://localhost:3000`
 ## API Endpoints
 
 ### Health Check
+
 - `GET /api/health` - Check service status
 
 ### Users
+
 - `GET /api/users/details/:userId` - Get detailed user information with recommendations
 
 ### Rankings (act as user lists returning)
+
 - `GET /api/ranking/:courseId` - Get ranking for specific course
 - `GET /api/ranking` - Get ranking for default course
 
 ### Sync
+
 - `POST /api/sync` - Manual sync (requires password)
 - `GET /api/sync/status/:courseId` - Get sync status for course
 - `GET /api/sync/status` - Get sync status for default course
@@ -166,15 +170,15 @@ prisma/
 
 ## Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | Required |
-| `CANVAS_API_BASE_URL` | Canvas LMS API base URL | Required |
-| `CANVAS_API_KEY` | Canvas API access token | Required |
-| `COURSE_ID` | Default Canvas course ID | Required |
-| `PORT` | Server port | 3000 |
-| `SYNC_PASSWORD` | Password for manual sync | Required |
-| `CRON_INTERVAL` | Cron expression for auto sync | `*/45 * * * *` |
+| Variable              | Description                   | Default        |
+| --------------------- | ----------------------------- | -------------- |
+| `DATABASE_URL`        | PostgreSQL connection string  | Required       |
+| `CANVAS_API_BASE_URL` | Canvas LMS API base URL       | Required       |
+| `CANVAS_API_KEY`      | Canvas API access token       | Required       |
+| `COURSE_ID`           | Default Canvas course ID      | Required       |
+| `PORT`                | Server port                   | 3000           |
+| `SYNC_PASSWORD`       | Password for manual sync      | Required       |
+| `CRON_INTERVAL`       | Cron expression for auto sync | `*/45 * * * *` |
 
 ## Canvas Integration
 
@@ -188,7 +192,8 @@ The system integrates with Canvas LMS to:
 ### Quiz Title Format
 
 Quizzes should follow this naming pattern for automatic cluster detection:
-- `[READING][ART 1]` 
+
+- `[READING][ART 1]`
 - `[LISTENING] [BUSINESS 2]`
 - `[TECHNOLOGY 3]`
 

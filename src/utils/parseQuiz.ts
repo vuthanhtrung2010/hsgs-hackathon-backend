@@ -2,9 +2,9 @@
  * Parsed quiz information from title
  */
 export interface ParsedQuiz {
-  types: string[];     // Array of types/categories from the title
-  lesson: string;      // Tên bài (Lesson name)
-  difficulty: number;  // Độ khó (Difficulty)
+  types: string[]; // Array of types/categories from the title
+  lesson: string; // Tên bài (Lesson name)
+  difficulty: number; // Độ khó (Difficulty)
   class: number | null; // Lớp (Class/Grade) - Optional
 }
 
@@ -26,7 +26,7 @@ export function parseQuiz(quizName: string): ParsedQuiz | null {
     return null;
   }
 
-  const types = typesMatch.map(type => type.slice(1, -1).trim()); // Remove brackets and trim
+  const types = typesMatch.map((type) => type.slice(1, -1).trim()); // Remove brackets and trim
 
   // Match the rest of the pattern: lesson name <<difficulty>> (class)
   // Find the position after all consecutive bracketed types
@@ -36,9 +36,9 @@ export function parseQuiz(quizName: string): ParsedQuiz | null {
   while ((match = bracketPattern.exec(quizName)) !== null) {
     lastBracketEnd = match.index + match[0].length;
   }
-  
+
   const remainingText = quizName.slice(lastBracketEnd).trim();
-  
+
   // Try to match with full pattern first (lesson <difficulty> (class))
   const fullPattern = /^(.+?)\s*<(-?\d+(?:\.\d+)?)>\s*\((\d+)\)$/i;
   const fullMatch = remainingText.match(fullPattern);
@@ -56,12 +56,15 @@ export function parseQuiz(quizName: string): ParsedQuiz | null {
     // Validate difficulty is a number
     const difficulty = parseFloat(difficultyStr);
     if (isNaN(difficulty)) {
-      console.log(`Skipping quiz "${quizName}" - invalid difficulty: ${difficultyStr}`);
+      console.log(
+        `Skipping quiz "${quizName}" - invalid difficulty: ${difficultyStr}`,
+      );
       return null;
     }
 
     // Generate random difficulty if < 1
-    const finalDifficulty = difficulty < 1 ? Math.random() * 100 + 1 : difficulty;
+    const finalDifficulty =
+      difficulty < 1 ? Math.random() * 100 + 1 : difficulty;
 
     // Validate class is a number
     const classNum = parseInt(classStr, 10);
@@ -74,7 +77,7 @@ export function parseQuiz(quizName: string): ParsedQuiz | null {
       types,
       lesson,
       difficulty: finalDifficulty,
-      class: classNum
+      class: classNum,
     };
   }
 
@@ -94,18 +97,21 @@ export function parseQuiz(quizName: string): ParsedQuiz | null {
     // Validate difficulty is a number
     const difficulty = parseFloat(difficultyStr);
     if (isNaN(difficulty)) {
-      console.log(`Skipping quiz "${quizName}" - invalid difficulty: ${difficultyStr}`);
+      console.log(
+        `Skipping quiz "${quizName}" - invalid difficulty: ${difficultyStr}`,
+      );
       return null;
     }
 
     // Generate random difficulty if < 1
-    const finalDifficulty = difficulty < 1 ? Math.random() * 100 + 1 : difficulty;
+    const finalDifficulty =
+      difficulty < 1 ? Math.random() * 100 + 1 : difficulty;
 
     return {
       types,
       lesson,
       difficulty: finalDifficulty,
-      class: null // No class provided
+      class: null, // No class provided
     };
   }
 
@@ -136,7 +142,7 @@ export function parseQuiz(quizName: string): ParsedQuiz | null {
       types,
       lesson,
       difficulty: randomDifficulty,
-      class: classNum
+      class: classNum,
     };
   }
 
@@ -149,7 +155,7 @@ export function parseQuiz(quizName: string): ParsedQuiz | null {
       types,
       lesson: remainingText.trim(),
       difficulty: randomDifficulty,
-      class: null // No class provided
+      class: null, // No class provided
     };
   }
 

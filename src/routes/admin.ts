@@ -1,20 +1,23 @@
-import { Elysia } from 'elysia';
-import { db } from '../db.js';
-import { env } from '../env.js';
+import { Elysia } from "elysia";
+import { db } from "../db.js";
+import { env } from "../env.js";
 
-export const adminRoutes = new Elysia({ prefix: '/api/admin' })
-  
+export const adminRoutes = new Elysia({ prefix: "/api/admin" })
+
   // Get dashboard stats
-  .get('/stats', async () => {
+  .get("/stats", async () => {
     try {
-      const [classCount, totalStudents, canvasUserCount, announcementCount] = await Promise.all([
-        db.class.count(),
-        db.class.findMany().then(classes => 
-          classes.reduce((total, cls) => total + cls.students.length, 0)
-        ),
-        db.canvasUser.count(),
-        db.announcement.count()
-      ]);
+      const [classCount, totalStudents, canvasUserCount, announcementCount] =
+        await Promise.all([
+          db.class.count(),
+          db.class
+            .findMany()
+            .then((classes) =>
+              classes.reduce((total, cls) => total + cls.students.length, 0),
+            ),
+          db.canvasUser.count(),
+          db.announcement.count(),
+        ]);
 
       return {
         success: true,
@@ -23,24 +26,24 @@ export const adminRoutes = new Elysia({ prefix: '/api/admin' })
           totalStudents,
           canvasUserCount,
           announcementCount,
-        }
+        },
       };
     } catch (error) {
-      console.error('Error fetching dashboard stats:', error);
+      console.error("Error fetching dashboard stats:", error);
       return {
         success: false,
-        error: 'Failed to fetch dashboard stats'
+        error: "Failed to fetch dashboard stats",
       };
     }
   })
 
   // Get all classes with member counts
-  .get('/classes', async () => {
+  .get("/classes", async () => {
     try {
       const classes = await db.class.findMany({
         orderBy: {
-          name: 'asc'
-        }
+          name: "asc",
+        },
       });
 
       // Add member counts (length of students array)
@@ -49,39 +52,39 @@ export const adminRoutes = new Elysia({ prefix: '/api/admin' })
         name: classItem.name,
         memberCount: classItem.students.length,
         createdAt: classItem.createdAt,
-        updatedAt: classItem.updatedAt
+        updatedAt: classItem.updatedAt,
       }));
 
       return {
         success: true,
-        classes: classesWithCounts
+        classes: classesWithCounts,
       };
     } catch (error) {
-      console.error('Error fetching classes:', error);
+      console.error("Error fetching classes:", error);
       return {
         success: false,
-        error: 'Failed to fetch classes'
+        error: "Failed to fetch classes",
       };
     }
   })
 
   // Create a new class
-  .post('/classes', async ({ body }: { body: any }) => {
+  .post("/classes", async ({ body }: { body: any }) => {
     try {
       const { name, userNames } = body;
 
       if (!name) {
         return {
           success: false,
-          error: 'Class name is required'
+          error: "Class name is required",
         };
       }
 
       // Parse user names into array
       let students: string[] = [];
-      if (userNames && typeof userNames === 'string') {
+      if (userNames && typeof userNames === "string") {
         students = userNames
-          .split(',')
+          .split(",")
           .map((name: string) => name.trim())
           .filter((name: string) => name.length > 0);
       }
@@ -90,35 +93,35 @@ export const adminRoutes = new Elysia({ prefix: '/api/admin' })
       const newClass = await db.class.create({
         data: {
           name: name,
-          students: students
-        }
+          students: students,
+        },
       });
 
       return {
         success: true,
         class: newClass,
-        message: `Class "${name}" created successfully with ${students.length} students`
+        message: `Class "${name}" created successfully with ${students.length} students`,
       };
     } catch (error) {
-      console.error('Error creating class:', error);
+      console.error("Error creating class:", error);
       return {
         success: false,
-        error: 'Failed to create class'
+        error: "Failed to create class",
       };
     }
   })
 
   // Get class details with members
-  .get('/classes/:id', async ({ params }: { params: { id: string } }) => {
+  .get("/classes/:id", async ({ params }: { params: { id: string } }) => {
     try {
       const classDetails = await db.class.findUnique({
-        where: { id: params.id }
+        where: { id: params.id },
       });
 
       if (!classDetails) {
         return {
           success: false,
-          error: 'Class not found'
+          error: "Class not found",
         };
       }
 
@@ -130,200 +133,212 @@ export const adminRoutes = new Elysia({ prefix: '/api/admin' })
           students: classDetails.students,
           memberCount: classDetails.students.length,
           createdAt: classDetails.createdAt,
-          updatedAt: classDetails.updatedAt
-        }
+          updatedAt: classDetails.updatedAt,
+        },
       };
     } catch (error) {
-      console.error('Error fetching class details:', error);
+      console.error("Error fetching class details:", error);
       return {
         success: false,
-        error: 'Failed to fetch class details'
+        error: "Failed to fetch class details",
       };
     }
   })
 
   // Update class students
-  .put('/classes/:id', async ({ params, body }: { params: { id: string }, body: any }) => {
-    try {
-      const { students } = body;
+  .put(
+    "/classes/:id",
+    async ({ params, body }: { params: { id: string }; body: any }) => {
+      try {
+        const { students } = body;
 
-      if (!Array.isArray(students)) {
+        if (!Array.isArray(students)) {
+          return {
+            success: false,
+            error: "Students must be an array",
+          };
+        }
+
+        // Validate that all students are strings
+        const validStudents = students
+          .filter(
+            (student: any) =>
+              typeof student === "string" && student.trim().length > 0,
+          )
+          .map((student: string) => student.trim());
+
+        const updatedClass = await db.class.update({
+          where: { id: params.id },
+          data: {
+            students: validStudents,
+          },
+        });
+
+        return {
+          success: true,
+          class: {
+            id: updatedClass.id,
+            name: updatedClass.name,
+            students: updatedClass.students,
+            memberCount: updatedClass.students.length,
+            createdAt: updatedClass.createdAt,
+            updatedAt: updatedClass.updatedAt,
+          },
+          message: `Class updated successfully with ${validStudents.length} students`,
+        };
+      } catch (error) {
+        console.error("Error updating class:", error);
         return {
           success: false,
-          error: 'Students must be an array'
+          error: "Failed to update class",
         };
       }
-
-      // Validate that all students are strings
-      const validStudents = students.filter((student: any) => 
-        typeof student === 'string' && student.trim().length > 0
-      ).map((student: string) => student.trim());
-
-      const updatedClass = await db.class.update({
-        where: { id: params.id },
-        data: {
-          students: validStudents
-        }
-      });
-
-      return {
-        success: true,
-        class: {
-          id: updatedClass.id,
-          name: updatedClass.name,
-          students: updatedClass.students,
-          memberCount: updatedClass.students.length,
-          createdAt: updatedClass.createdAt,
-          updatedAt: updatedClass.updatedAt
-        },
-        message: `Class updated successfully with ${validStudents.length} students`
-      };
-    } catch (error) {
-      console.error('Error updating class:', error);
-      return {
-        success: false,
-        error: 'Failed to update class'
-      };
-    }
-  })
+    },
+  )
 
   // Announcement routes
   // Get all announcements
-  .get('/announcements', async () => {
+  .get("/announcements", async () => {
     try {
       const announcements = await db.announcement.findMany({
         orderBy: {
-          createdAt: 'desc'
-        }
+          createdAt: "desc",
+        },
       });
 
       return {
         success: true,
-        announcements
+        announcements,
       };
     } catch (error) {
-      console.error('Error fetching announcements:', error);
+      console.error("Error fetching announcements:", error);
       return {
         success: false,
-        error: 'Failed to fetch announcements'
+        error: "Failed to fetch announcements",
       };
     }
   })
 
   // Create announcement
-  .post('/announcements', async ({ body }: { body: any }) => {
+  .post("/announcements", async ({ body }: { body: any }) => {
     try {
       const { title } = body;
 
       if (!title || !title.trim()) {
         return {
           success: false,
-          error: 'Title is required'
+          error: "Title is required",
         };
       }
 
       const newAnnouncement = await db.announcement.create({
         data: {
           title: title.trim(),
-          content: ''
-        }
+          content: "",
+        },
       });
 
       return {
         success: true,
-        announcement: newAnnouncement
+        announcement: newAnnouncement,
       };
     } catch (error) {
-      console.error('Error creating announcement:', error);
+      console.error("Error creating announcement:", error);
       return {
         success: false,
-        error: 'Failed to create announcement'
+        error: "Failed to create announcement",
       };
     }
   })
 
   // Get single announcement
-  .get('/announcements/:id', async ({ params }: { params: { id: string } }) => {
+  .get("/announcements/:id", async ({ params }: { params: { id: string } }) => {
     try {
       const announcement = await db.announcement.findUnique({
-        where: { id: params.id }
+        where: { id: params.id },
       });
 
       if (!announcement) {
         return {
           success: false,
-          error: 'Announcement not found'
+          error: "Announcement not found",
         };
       }
 
       return {
         success: true,
-        announcement
+        announcement,
       };
     } catch (error) {
-      console.error('Error fetching announcement:', error);
+      console.error("Error fetching announcement:", error);
       return {
         success: false,
-        error: 'Failed to fetch announcement'
+        error: "Failed to fetch announcement",
       };
     }
   })
 
   // Update announcement
-  .put('/announcements/:id', async ({ params, body }: { params: { id: string }, body: any }) => {
-    try {
-      const { title, content } = body;
+  .put(
+    "/announcements/:id",
+    async ({ params, body }: { params: { id: string }; body: any }) => {
+      try {
+        const { title, content } = body;
 
-      if (!title || !title.trim()) {
+        if (!title || !title.trim()) {
+          return {
+            success: false,
+            error: "Title is required",
+          };
+        }
+
+        const updatedAnnouncement = await db.announcement.update({
+          where: { id: params.id },
+          data: {
+            title: title.trim(),
+            content: content || "",
+          },
+        });
+
+        return {
+          success: true,
+          announcement: updatedAnnouncement,
+        };
+      } catch (error) {
+        console.error("Error updating announcement:", error);
         return {
           success: false,
-          error: 'Title is required'
+          error: "Failed to update announcement",
         };
       }
-
-      const updatedAnnouncement = await db.announcement.update({
-        where: { id: params.id },
-        data: {
-          title: title.trim(),
-          content: content || ''
-        }
-      });
-
-      return {
-        success: true,
-        announcement: updatedAnnouncement
-      };
-    } catch (error) {
-      console.error('Error updating announcement:', error);
-      return {
-        success: false,
-        error: 'Failed to update announcement'
-      };
-    }
-  })
+    },
+  )
 
   // Delete announcement
-  .delete('/announcements/:id', async ({ params }: { params: { id: string } }) => {
-    try {
-      await db.announcement.delete({
-        where: { id: params.id }
-      });
+  .delete(
+    "/announcements/:id",
+    async ({ params }: { params: { id: string } }) => {
+      try {
+        await db.announcement.delete({
+          where: { id: params.id },
+        });
 
-      return {
-        success: true,
-        message: 'Announcement deleted successfully'
-      };
-    } catch (error) {
-      console.error('Error deleting announcement:', error);
-      return {
-        success: false,
-        error: 'Failed to delete announcement'
-      };
-    }
-  })
+        return {
+          success: true,
+          message: "Announcement deleted successfully",
+        };
+      } catch (error) {
+        console.error("Error deleting announcement:", error);
+        return {
+          success: false,
+          error: "Failed to delete announcement",
+        };
+      }
+    },
+  )
 
   // Get all users (better-auth users)
-  .get('/users', async () => {
+  .get("/users", async () => {
     try {
       const users = await db.user.findMany({
         select: {
@@ -333,28 +348,28 @@ export const adminRoutes = new Elysia({ prefix: '/api/admin' })
           emailVerified: true,
           image: true,
           createdAt: true,
-          updatedAt: true
+          updatedAt: true,
         },
         orderBy: {
-          createdAt: 'desc'
-        }
+          createdAt: "desc",
+        },
       });
 
       return {
         success: true,
-        users
+        users,
       };
     } catch (error) {
-      console.error('Error fetching users:', error);
+      console.error("Error fetching users:", error);
       return {
         success: false,
-        error: 'Failed to fetch users'
+        error: "Failed to fetch users",
       };
     }
   })
 
   // Get specific user by ID
-  .get('/users/:id', async ({ params }: { params: { id: string } }) => {
+  .get("/users/:id", async ({ params }: { params: { id: string } }) => {
     try {
       const user = await db.user.findUnique({
         where: { id: params.id },
@@ -365,87 +380,93 @@ export const adminRoutes = new Elysia({ prefix: '/api/admin' })
           emailVerified: true,
           image: true,
           createdAt: true,
-          updatedAt: true
-        }
+          updatedAt: true,
+        },
       });
 
       if (!user) {
         return {
           success: false,
-          error: 'User not found'
+          error: "User not found",
         };
       }
 
       return {
         success: true,
-        user
+        user,
       };
     } catch (error) {
-      console.error('Error fetching user:', error);
+      console.error("Error fetching user:", error);
       return {
         success: false,
-        error: 'Failed to fetch user'
+        error: "Failed to fetch user",
       };
     }
   })
 
   // Update user information
-  .put('/users/:id', async ({ params, body }: { params: { id: string }, body: any }) => {
-    try {
-      const { name, email } = body;
+  .put(
+    "/users/:id",
+    async ({ params, body }: { params: { id: string }; body: any }) => {
+      try {
+        const { name, email } = body;
 
-      if (!name || !email) {
-        return {
-          success: false,
-          error: 'Name and email are required'
-        };
-      }
-
-      // Validate email format
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        return {
-          success: false,
-          error: 'Invalid email format'
-        };
-      }
-
-      const updatedUser = await db.user.update({
-        where: { id: params.id },
-        data: {
-          name: name.trim(),
-          email: email.toLowerCase().trim(),
-          updatedAt: new Date()
-        },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          emailVerified: true,
-          image: true,
-          updatedAt: true
+        if (!name || !email) {
+          return {
+            success: false,
+            error: "Name and email are required",
+          };
         }
-      });
 
-      return {
-        success: true,
-        user: updatedUser,
-        message: 'User updated successfully'
-      };
-    } catch (error) {
-      console.error('Error updating user:', error);
-      
-      // Handle unique constraint violation for email
-      if (error instanceof Error && error.message.includes('Unique constraint')) {
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+          return {
+            success: false,
+            error: "Invalid email format",
+          };
+        }
+
+        const updatedUser = await db.user.update({
+          where: { id: params.id },
+          data: {
+            name: name.trim(),
+            email: email.toLowerCase().trim(),
+            updatedAt: new Date(),
+          },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            emailVerified: true,
+            image: true,
+            updatedAt: true,
+          },
+        });
+
+        return {
+          success: true,
+          user: updatedUser,
+          message: "User updated successfully",
+        };
+      } catch (error) {
+        console.error("Error updating user:", error);
+
+        // Handle unique constraint violation for email
+        if (
+          error instanceof Error &&
+          error.message.includes("Unique constraint")
+        ) {
+          return {
+            success: false,
+            error: "Email already exists",
+          };
+        }
+
         return {
           success: false,
-          error: 'Email already exists'
+          error: "Failed to update user",
         };
       }
-
-      return {
-        success: false,
-        error: 'Failed to update user'
-      };
-    }
-  });
+    },
+  );
