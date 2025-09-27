@@ -415,7 +415,7 @@ async function processBulkSubmissions(
               continue;
             }
 
-            const userScore =
+            const userAccuracy =
               submission.score! / submission.quiz_points_possible!;
 
             // Get user's problem count (simplified - estimate based on rating)
@@ -428,7 +428,7 @@ async function processBulkSubmissions(
               updateRatings(
                 user.rating,
                 question.rating,
-                userScore,
+                userAccuracy,
                 userProblemsSolved,
                 question.submissionCount + batchValidSubmissions,
               );
