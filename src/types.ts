@@ -54,6 +54,7 @@ export interface CanvasSubmission {
   finished_at: string | null;
   score: number | null;
   quiz_points_possible: number | null;
+  attempt: number;
   updated_at: string;
 }
 

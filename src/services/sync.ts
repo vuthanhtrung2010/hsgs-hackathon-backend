@@ -325,7 +325,8 @@ async function processBulkSubmissions(
       submission.finished_at &&
       submission.workflow_state === "complete" &&
       submission.score != null &&
-      submission.quiz_points_possible != null,
+      submission.quiz_points_possible != null &&
+      submission.attempt === 1, // Only process first attempts
   );
 
   if (validSubmissions.length === 0) {
