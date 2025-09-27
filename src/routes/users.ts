@@ -189,52 +189,146 @@ export const userRoutes = new Elysia({ prefix: "/api/users" })
         }
         const courseInfo = courseData[user.courseId]!; // We know it exists from above
 
-        // Add rating changes from quizzes - track the cluster rating progression
         // Sort quizzes by submission date to track rating progression
         const sortedQuizzes = user.quizzes.sort(
           (a, b) =>
             new Date(a.submittedAt).getTime() -
             new Date(b.submittedAt).getTime(),
         );
-
-        // Calculate cluster rating progression over time
-        const typeRatingsProgression: Record<string, number[]> = {};
-
-        for (let i = 0; i < sortedQuizzes.length; i++) {
-          const quiz = sortedQuizzes[i]!;
-          const question = quiz.question;
-
-          // Update type ratings up to this point in time
-          for (const type of question.types) {
-            if (!typeRatingsProgression[type]) {
-              typeRatingsProgression[type] = [];
-            }
-            typeRatingsProgression[type].push(question.rating);
+        
+        // Get all TopicRating entries for this user in this course to calculate weighted average progression
+        const topicRatings = await db.topicRating.findMany({
+          where: {
+            userId: user.id,
+            courseId: user.courseId
+          },
+          select: {
+            topic: true,
+            rating: true,
+            submissionCount: true,
+            updatedAt: true
+          },
+          orderBy: {
+            updatedAt: 'asc'
           }
-
-          // Calculate average cluster rating at this point in time
-          const typeAverages: number[] = [];
-          for (const [type, ratings] of Object.entries(
-            typeRatingsProgression,
-          )) {
-            if (ratings.length > 0) {
-              const typeAverage =
-                ratings.reduce((sum, rating) => sum + rating, 0) /
-                ratings.length;
-              typeAverages.push(typeAverage);
+        });
+        
+        // Build rating changes history based on quiz submission times and topic rating updates
+        if (topicRatings.length > 0) {
+          // Group topic ratings by updatedAt date to calculate weighted average at each point
+          const ratingChangesByDate: Map<string, { 
+            date: Date, 
+            topicRatings: { topic: string, rating: number, submissionCount: number }[] 
+          }> = new Map();
+          
+          // Initialize with quizzes to get the submission dates
+          for (const quiz of sortedQuizzes) {
+            const dateKey = quiz.submittedAt.toISOString();
+            if (!ratingChangesByDate.has(dateKey)) {
+              ratingChangesByDate.set(dateKey, {
+                date: quiz.submittedAt,
+                topicRatings: []
+              });
             }
           }
-
-          const averageClusterRating =
-            typeAverages.length > 0
-              ? typeAverages.reduce((sum, avg) => sum + avg, 0) /
-                typeAverages.length
-              : 1500;
-
-          courseInfo.ratingChanges.push({
-            date: quiz.submittedAt.toISOString(),
-            rating: Math.round(averageClusterRating), // This shows the cluster rating after this quiz
-          });
+          
+          // Fill in topic ratings based on their update dates
+          let currentTopicRatings: { topic: string, rating: number, submissionCount: number }[] = [];
+          
+          // Process each topic rating update
+          for (const topicRating of topicRatings) {
+            const dateKey = topicRating.updatedAt.toISOString();
+            
+            // Update our current knowledge of topic ratings
+            const existingIndex = currentTopicRatings.findIndex(tr => tr.topic === topicRating.topic);
+            if (existingIndex >= 0) {
+              currentTopicRatings[existingIndex] = {
+                topic: topicRating.topic,
+                rating: topicRating.rating,
+                submissionCount: topicRating.submissionCount
+              };
+            } else {
+              currentTopicRatings.push({
+                topic: topicRating.topic,
+                rating: topicRating.rating,
+                submissionCount: topicRating.submissionCount
+              });
+            }
+            
+            // Create or update entry for this date
+            if (!ratingChangesByDate.has(dateKey)) {
+              ratingChangesByDate.set(dateKey, {
+                date: topicRating.updatedAt,
+                topicRatings: [...currentTopicRatings]
+              });
+            } else {
+              ratingChangesByDate.get(dateKey)!.topicRatings = [...currentTopicRatings];
+            }
+          }
+          
+          // Convert to sorted array and calculate weighted average ratings
+          const sortedDates = Array.from(ratingChangesByDate.values())
+            .sort((a, b) => a.date.getTime() - b.date.getTime());
+          
+          for (const entry of sortedDates) {
+            // Calculate weighted average rating at this point in time
+            if (entry.topicRatings.length > 0) {
+              let totalRatingSum = 0;
+              let totalSubmissions = 0;
+              
+              for (const topicRating of entry.topicRatings) {
+                totalRatingSum += topicRating.rating * topicRating.submissionCount;
+                totalSubmissions += topicRating.submissionCount;
+              }
+              
+              const weightedAvgRating = totalSubmissions > 0
+                ? Math.round(totalRatingSum / totalSubmissions)
+                : 1500;
+              
+              courseInfo.ratingChanges.push({
+                date: entry.date.toISOString(),
+                rating: weightedAvgRating
+              });
+            }
+          }
+        } else {
+          // Fallback to old method if no topic ratings exist yet
+          const typeRatingsProgression: Record<string, number[]> = {};
+          
+          for (let i = 0; i < sortedQuizzes.length; i++) {
+            const quiz = sortedQuizzes[i]!;
+            const question = quiz.question;
+            
+            // Update type ratings up to this point in time
+            for (const type of question.types) {
+              if (!typeRatingsProgression[type]) {
+                typeRatingsProgression[type] = [];
+              }
+              typeRatingsProgression[type].push(question.rating);
+            }
+            
+            // Calculate average cluster rating at this point in time
+            const typeAverages: number[] = [];
+            for (const [type, ratings] of Object.entries(typeRatingsProgression)) {
+              if (ratings.length > 0) {
+                const typeAverage =
+                  ratings.reduce((sum, rating) => sum + rating, 0) /
+                  ratings.length;
+                typeAverages.push(typeAverage);
+              }
+            }
+            
+            const averageClusterRating =
+              typeAverages.length > 0
+                ? typeAverages.reduce((sum, avg) => sum + avg, 0) /
+                  typeAverages.length
+                : 1500;
+            
+            courseInfo.ratingChanges.push({
+              date: quiz.submittedAt.toISOString(),
+              rating: Math.round(averageClusterRating)
+            });
+          }
         }
 
         // Get topic ratings for this user from the database
