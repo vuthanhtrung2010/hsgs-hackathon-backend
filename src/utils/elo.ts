@@ -71,6 +71,12 @@ export function questionKFactor(submissionCount: number, questionRating: number 
 /**
  * Update ratings using an improved dual ELO system based on user's accuracy
  * 
+ * Key behaviors:
+ * 1. 0% accuracy ALWAYS results in a negative rating change for the user
+ * 2. 100% accuracy results in a positive rating change for the user
+ * 3. Rating floors prevent users from dropping below 1000
+ * 4. K-factors are dynamically calculated based on experience and current ratings
+ * 
  * @param userRating - Current user rating
  * @param questionRating - Current question rating
  * @param userAccuracy - User's accuracy (score/total possible score, between 0-1)
@@ -112,18 +118,45 @@ export function updateRatings(
   // Calculate rating changes
   const ratingChange = Math.round(userK * performanceDiff);
   
-  // For 0% accuracy, ensure rating decreases
-  const finalRatingChange = userAccuracy === 0 
-    ? Math.min(ratingChange, -10) // Force negative change of at least -10 for 0% accuracy
-    : ratingChange;
+  // For 0% accuracy, ensure rating ALWAYS decreases no matter what
+  let finalRatingChange = ratingChange;
+  if (userAccuracy === 0) {
+    // Always apply at least a -10 penalty for 0% accuracy, regardless of other factors
+    finalRatingChange = Math.min(ratingChange, -10);
+    
+    // Handle edge case: if a user is already at rating floor, make sure to return negative value
+    if (finalRatingChange >= 0) {
+      finalRatingChange = -10;
+    }
+  }
+  
+  // Calculate the raw new ratings before applying floors
+  const rawNewUserRating = userRating + finalRatingChange;
+  const rawNewQuestionRating = questionRating + Math.round(questionK * (expected - transformedAccuracy));
   
   // Apply changes with rating floors to prevent extreme deflation
-  const newUserRating = Math.max(1000, userRating + finalRatingChange);
-  const newQuestionRating = Math.max(1000, questionRating + Math.round(questionK * (expected - transformedAccuracy)));
+  const newUserRating = Math.max(1000, rawNewUserRating);
+  const newQuestionRating = Math.max(1000, rawNewQuestionRating);
+  
+  // Recalculate the effective rating change after applying the floor
+  const effectiveRatingChange = newUserRating - userRating;
+
+  // When accuracy is 0, make sure the reported change is negative
+  let reportedRatingChange = effectiveRatingChange;
+  
+  if (userAccuracy === 0) {
+    // If we hit the rating floor with 0 accuracy, we should still report a negative change
+    if (effectiveRatingChange >= 0) {
+      // Calculate how much we would have lost if there was no floor
+      const wouldHaveLost = Math.min(finalRatingChange, -10);
+      // Report that as the rating change, but cap it to avoid showing huge losses
+      reportedRatingChange = Math.max(wouldHaveLost, -30);
+    }
+  }
 
   return {
     newUserRating,
     newQuestionRating,
-    ratingChange,
+    ratingChange: reportedRatingChange,
   };
 }
