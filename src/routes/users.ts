@@ -238,7 +238,7 @@ export const userRoutes = new Elysia({ prefix: "/api/users" })
         }
 
         // Get topic ratings for this user from the database
-        const topicRatings = await db.topicRating.findMany({
+        const userTopicRatings = await db.topicRating.findMany({
           where: {
             userId: user.id,
             courseId: user.courseId
@@ -248,9 +248,9 @@ export const userRoutes = new Elysia({ prefix: "/api/users" })
         // Initialize clusters from topic ratings
         const skillsClusters: Record<string, number> = {};
         
-        if (topicRatings.length > 0) {
+        if (userTopicRatings.length > 0) {
           // Use the direct topic ratings from the database
-          for (const topicRating of topicRatings) {
+          for (const topicRating of userTopicRatings) {
             skillsClusters[topicRating.topic] = topicRating.rating;
           }
         } else {
@@ -285,8 +285,20 @@ export const userRoutes = new Elysia({ prefix: "/api/users" })
         // Set quizzes completed count for this course
         courseInfo.quizzesCompleted = user.quizzes.length;
 
-        // Calculate min/max from rating changes (the cluster rating progression)
-        if (courseInfo.ratingChanges.length > 0) {
+        // Calculate min/max from topic ratings directly
+        const courseTopicRatings = await db.topicRating.findMany({
+          where: {
+            userId: user.id,
+            courseId: user.courseId
+          }
+        });
+        
+        if (courseTopicRatings.length > 0) {
+          const ratings = courseTopicRatings.map(tr => tr.rating);
+          courseInfo.minRating = Math.min(...ratings);
+          courseInfo.maxRating = Math.max(...ratings);
+        } else if (courseInfo.ratingChanges.length > 0) {
+          // Fallback to rating changes if no topic ratings
           const ratings = courseInfo.ratingChanges.map((rc) => rc.rating);
           courseInfo.minRating = Math.min(...ratings);
           courseInfo.maxRating = Math.max(...ratings);
@@ -305,25 +317,45 @@ export const userRoutes = new Elysia({ prefix: "/api/users" })
         primaryCourse.recommendations = recommendations;
       }
 
+      // Calculate user's overall rating as the weighted average of their topic ratings
+      let overallRating = 1500; // Default starting rating
+      let totalTopicSubmissions = 0;
+      let totalTopicRatingSum = 0;
+      
+      // Collect all topic ratings across all courses
+      const allTopicRatings: {topic: string, rating: number, submissionCount: number}[] = [];
+      
+      // Get all topic ratings for this user from database
+      for (const user of users) {
+        const topicRatings = await db.topicRating.findMany({
+          where: {
+            userId: user.id
+          }
+        });
+        
+        allTopicRatings.push(...topicRatings);
+      }
+      
+      // Calculate weighted average if we have topic ratings
+      if (allTopicRatings.length > 0) {
+        for (const topicRating of allTopicRatings) {
+          totalTopicRatingSum += topicRating.rating * topicRating.submissionCount;
+          totalTopicSubmissions += topicRating.submissionCount;
+        }
+        
+        if (totalTopicSubmissions > 0) {
+          overallRating = Math.round(totalTopicRatingSum / totalTopicSubmissions);
+        }
+      } else if (users.length > 0 && users[0]) {
+        // Fallback to user's rating in database if no topic ratings
+        overallRating = users[0].rating;
+      }
+      
       const userData: IUserData = {
         id: userId,
         name: users[0]?.name || "Undefined name",
         shortName: users[0]?.shortName || "Undefined short name",
-        rating: Math.round(
-          Object.values(courseData).reduce((sum, course) => {
-            // Calculate average rating across all cluster types for this course
-            const clusterRatings = Object.values(course.clusters);
-            if (clusterRatings.length > 0) {
-              const courseAverage =
-                clusterRatings.reduce(
-                  (clusterSum, rating) => clusterSum + rating,
-                  0,
-                ) / clusterRatings.length;
-              return sum + courseAverage;
-            }
-            return sum;
-          }, 0) / Object.keys(courseData).length,
-        ),
+        rating: overallRating,
         avatarURL,
         courses: Object.values(courseData),
       };
