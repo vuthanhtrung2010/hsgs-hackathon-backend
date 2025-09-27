@@ -4,21 +4,27 @@ import { db } from "../db.js";
 export const rankingRoutes = new Elysia({ prefix: "/api/ranking" })
   .get("/:courseId", async ({ params: { courseId } }) => {
     try {
-      // Get all users with their quizzes and question types for the specified course
+      // Get all users for the specified course
       const users = await db.canvasUser.findMany({
         where: { courseId },
         select: {
+          id: true,
           studentId: true,
           name: true,
           shortName: true,
+          topicRatings: {
+            where: {
+              courseId: courseId,
+            },
+            select: {
+              rating: true,
+              submissionCount: true,
+              topic: true,
+            },
+          },
           quizzes: {
             select: {
-              question: {
-                select: {
-                  rating: true,
-                  types: true,
-                },
-              },
+              id: true,
             },
             where: {
               question: {
@@ -41,43 +47,23 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" })
 
       const courseName = course?.name || `Course ${courseId}`;
 
-      // Calculate average rating across all cluster types for each user
+      // Calculate average rating as weighted average of topic ratings for each user
       const ranking = users
         .map((user) => {
-          let averageRating = 0;
-
-          if (user.quizzes.length > 0) {
-            // Group question ratings by type
-            const typeRatings: Record<string, number[]> = {};
-
-            for (const quiz of user.quizzes) {
-              const question = quiz.question;
-
-              // Process each type for this question
-              for (const type of question.types) {
-                if (!typeRatings[type]) {
-                  typeRatings[type] = [];
-                }
-                // Use the question rating as a measure of skill in this type
-                typeRatings[type].push(question.rating);
-              }
+          let averageRating = 1500; // Default rating
+          
+          // Calculate weighted average of topic ratings if available
+          if (user.topicRatings.length > 0) {
+            let totalRatingSum = 0;
+            let totalSubmissions = 0;
+            
+            for (const topicRating of user.topicRatings) {
+              totalRatingSum += topicRating.rating * topicRating.submissionCount;
+              totalSubmissions += topicRating.submissionCount;
             }
-
-            // Calculate average rating per type, then average across all types
-            const typeAverages: number[] = [];
-            for (const [type, ratings] of Object.entries(typeRatings)) {
-              if (ratings.length > 0) {
-                const typeAverage =
-                  ratings.reduce((sum, rating) => sum + rating, 0) /
-                  ratings.length;
-                typeAverages.push(typeAverage);
-              }
-            }
-
-            if (typeAverages.length > 0) {
-              averageRating =
-                typeAverages.reduce((sum, avg) => sum + avg, 0) /
-                typeAverages.length;
+            
+            if (totalSubmissions > 0) {
+              averageRating = totalRatingSum / totalSubmissions;
             }
           }
 
@@ -88,7 +74,7 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" })
             course: {
               courseId: parseInt(courseId),
               courseName,
-              rating: Math.round(averageRating), // Average rating across all cluster types
+              rating: Math.round(averageRating), // Weighted average rating across all topics
               quizzesCompleted: user.quizzes.length, // Number of completed quizzes
             },
           };
@@ -111,21 +97,27 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" })
         return { error: "No default course ID configured" };
       }
 
-      // Get all users with their quizzes and question types for the default course
+      // Get all users for the default course with their topic ratings
       const users = await db.canvasUser.findMany({
         where: { courseId: defaultCourseId },
         select: {
+          id: true,
           studentId: true,
           name: true,
           shortName: true,
+          topicRatings: {
+            where: {
+              courseId: defaultCourseId,
+            },
+            select: {
+              rating: true,
+              submissionCount: true,
+              topic: true,
+            },
+          },
           quizzes: {
             select: {
-              question: {
-                select: {
-                  rating: true,
-                  types: true,
-                },
-              },
+              id: true,
             },
             where: {
               question: {
@@ -148,43 +140,23 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" })
 
       const courseName = course?.name || `Course ${defaultCourseId}`;
 
-      // Calculate average rating across all cluster types for each user
+      // Calculate average rating as weighted average of topic ratings for each user
       const ranking = users
         .map((user) => {
-          let averageRating = 0;
-
-          if (user.quizzes.length > 0) {
-            // Group question ratings by type
-            const typeRatings: Record<string, number[]> = {};
-
-            for (const quiz of user.quizzes) {
-              const question = quiz.question;
-
-              // Process each type for this question
-              for (const type of question.types) {
-                if (!typeRatings[type]) {
-                  typeRatings[type] = [];
-                }
-                // Use the question rating as a measure of skill in this type
-                typeRatings[type].push(question.rating);
-              }
+          let averageRating = 1500; // Default rating
+          
+          // Calculate weighted average of topic ratings if available
+          if (user.topicRatings.length > 0) {
+            let totalRatingSum = 0;
+            let totalSubmissions = 0;
+            
+            for (const topicRating of user.topicRatings) {
+              totalRatingSum += topicRating.rating * topicRating.submissionCount;
+              totalSubmissions += topicRating.submissionCount;
             }
-
-            // Calculate average rating per type, then average across all types
-            const typeAverages: number[] = [];
-            for (const [type, ratings] of Object.entries(typeRatings)) {
-              if (ratings.length > 0) {
-                const typeAverage =
-                  ratings.reduce((sum, rating) => sum + rating, 0) /
-                  ratings.length;
-                typeAverages.push(typeAverage);
-              }
-            }
-
-            if (typeAverages.length > 0) {
-              averageRating =
-                typeAverages.reduce((sum, avg) => sum + avg, 0) /
-                typeAverages.length;
+            
+            if (totalSubmissions > 0) {
+              averageRating = totalRatingSum / totalSubmissions;
             }
           }
 
@@ -195,7 +167,7 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" })
             course: {
               courseId: parseInt(defaultCourseId),
               courseName,
-              rating: Math.round(averageRating), // Average rating across all cluster types
+              rating: Math.round(averageRating), // Weighted average rating across all topics
             },
           };
         })
