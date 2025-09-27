@@ -354,11 +354,13 @@ async function processBulkSubmissions(
 
   // Get users and question data in parallel
   const [users, question] = await Promise.all([
-    db.$queryRawUnsafe<{ id: number; studentId: string; rating: number }[]>(
+    db.$queryRawUnsafe<{ id: number; studentId: string; rating: number; problemsSolved: bigint }[]>(
       `
-      SELECT id, "studentId", rating 
-      FROM "users" 
-      WHERE "studentId" = ANY($1::text[]) AND "courseId" = $2
+      SELECT u.id, u."studentId", u.rating, COUNT(qz.id) as "problemsSolved"
+      FROM "users" u
+      LEFT JOIN "quizzes" qz ON u.id = qz."userId"
+      WHERE u."studentId" = ANY($1::text[]) AND u."courseId" = $2
+      GROUP BY u.id, u."studentId", u.rating
     `,
       studentIds,
       courseId,
@@ -418,11 +420,8 @@ async function processBulkSubmissions(
             const userAccuracy =
               submission.score! / submission.quiz_points_possible!;
 
-            // Get user's problem count (simplified - estimate based on rating)
-            const userProblemsSolved = Math.max(
-              0,
-              Math.floor((user.rating - 1500) / 10),
-            );
+            // Get user's actual problem count from the pre-fetched data
+            const userProblemsSolved = Number(user.problemsSolved);
 
             const { newUserRating, newQuestionRating, ratingChange } =
               updateRatings(
