@@ -85,14 +85,19 @@ export function updateRatings(
   userProblemsCount: number,
   questionSubmissions: number,
 ): { newUserRating: number; newQuestionRating: number; ratingChange: number } {
+  // Validate accuracy input - ensure it's between 0-1
+  userAccuracy = Math.max(0, Math.min(1, userAccuracy));
   // Calculate expected performance based on ratings
   const expected = expectedScore(userRating, questionRating);
   
   // Non-linear accuracy mapping to emphasize differences in high accuracy
   // This makes the difference between 0.8 and 0.9 more significant than 0.1 and 0.2
-  const transformedAccuracy = userAccuracy <= 0.5 
-    ? userAccuracy * 0.5 
-    : 0.5 + Math.pow(2 * (userAccuracy - 0.5), 1.5) * 0.5;
+  // Ensure 0% accuracy results in negative rating change
+  const transformedAccuracy = userAccuracy === 0 
+    ? 0 // Zero accuracy should be treated as zero (guaranteed negative rating change)
+    : userAccuracy <= 0.5 
+      ? userAccuracy * 0.5 
+      : 0.5 + Math.pow(2 * (userAccuracy - 0.5), 1.5) * 0.5;
   
   // Calculate performance difference with emphasis on extreme performances
   const performanceDiff = transformedAccuracy - expected;
@@ -107,8 +112,13 @@ export function updateRatings(
   // Calculate rating changes
   const ratingChange = Math.round(userK * performanceDiff);
   
+  // For 0% accuracy, ensure rating decreases
+  const finalRatingChange = userAccuracy === 0 
+    ? Math.min(ratingChange, -10) // Force negative change of at least -10 for 0% accuracy
+    : ratingChange;
+  
   // Apply changes with rating floors to prevent extreme deflation
-  const newUserRating = Math.max(1000, userRating + ratingChange);
+  const newUserRating = Math.max(1000, userRating + finalRatingChange);
   const newQuestionRating = Math.max(1000, questionRating + Math.round(questionK * (expected - transformedAccuracy)));
 
   return {
