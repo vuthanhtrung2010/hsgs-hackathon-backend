@@ -329,6 +329,12 @@ async function processBulkSubmissions(
       submission.attempt === 1, // Only process first attempts
   );
 
+  // Debug logging for filtering
+  const filteredOut = submissions.length - validSubmissions.length;
+  if (filteredOut > 0) {
+    console.log(`🔍 Filtered out ${filteredOut} submissions (${validSubmissions.length} valid, ${submissions.length} total)`);
+  }
+
   if (validSubmissions.length === 0) {
     console.log("No valid submissions to process");
     return;
@@ -421,6 +427,16 @@ async function processBulkSubmissions(
             const userAccuracy =
               submission.score! / submission.quiz_points_possible!;
 
+            // Debug logging for edge cases
+            if (userAccuracy === 0) {
+              console.log(`⚠️  Zero accuracy detected: User ${studentId} scored ${submission.score}/${submission.quiz_points_possible} on quiz ${quizId}`);
+            }
+            if (isNaN(userAccuracy)) {
+              console.log(`🚨 NaN accuracy detected: User ${studentId} scored ${submission.score}/${submission.quiz_points_possible} on quiz ${quizId}`);
+            }
+
+            console.log(`📊 User ${studentId} accuracy: ${userAccuracy.toFixed(3)} (${submission.score}/${submission.quiz_points_possible})`);
+
             // Get user's actual problem count from the pre-fetched data
             const userProblemsSolved = Number(user.problemsSolved);
 
@@ -432,6 +448,11 @@ async function processBulkSubmissions(
                 userProblemsSolved,
                 question.submissionCount + batchValidSubmissions,
               );
+
+            // Debug logging for rating changes in edge cases
+            if (userAccuracy === 0 || isNaN(userAccuracy)) {
+              console.log(`📈 Rating change for ${userAccuracy === 0 ? 'zero accuracy' : 'NaN accuracy'}: User ${user.rating} → ${newUserRating} (${ratingChange > 0 ? '+' : ''}${ratingChange})`);
+            }
 
             quizRecords.push({
               userId: user.id,
