@@ -11,15 +11,16 @@ datasource db {
 }
 
 model CanvasUser {
-  id        Int      @id @default(autoincrement())
-  studentId String // Canvas user ID
-  name      String
-  shortName String
-  courseId  String // Canvas course ID
-  rating    Float    @default(1500)
-  quizzes   Quiz[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           Int           @id @default(autoincrement())
+  studentId    String        // Canvas user ID
+  name         String
+  shortName    String
+  courseId     String        // Canvas course ID
+  rating       Float         @default(1500)
+  quizzes      Quiz[]
+  topicRatings TopicRating[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
   @@unique([studentId, courseId])
   @@index([courseId])
@@ -165,4 +166,21 @@ model Verification {
   updatedAt  DateTime @default(now()) @updatedAt
 
   @@map("verification")
+}
+
+model TopicRating {
+  id              Int        @id @default(autoincrement())
+  topic           String     // Topic name like "Reading", "Math", etc.
+  userId          Int        // Reference to CanvasUser
+  user            CanvasUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId        String     // Canvas course ID
+  rating          Float      @default(1500)
+  submissionCount Int        @default(0)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@unique([topic, userId, courseId])
+  @@index([userId])
+  @@index([courseId])
+  @@map("topic_ratings")
 }

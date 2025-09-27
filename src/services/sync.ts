@@ -17,6 +17,61 @@ const CONCURRENCY_LIMIT = 5; // Maximum concurrent operations
 const userProfileCache = new Map<string, any>();
 
 /**
+ * Helper function to update topic ratings for a user based on quiz submission
+ */
+async function updateTopicRatings(
+  userId: number, 
+  studentId: string,
+  courseId: string,
+  topics: string[],
+  accuracy: number
+): Promise<void> {
+  if (!topics || topics.length === 0) return;
+  
+  try {
+    // Calculate rating change based on accuracy
+    // Higher accuracy = higher rating, lower accuracy = lower rating
+    const baseRatingChange = Math.round((accuracy - 0.5) * 100); // Simple linear model
+    
+    console.log(`📊 Updating ${topics.length} topics for user ${studentId} with change ${baseRatingChange > 0 ? '+' : ''}${baseRatingChange}`);
+    
+    // Update each topic rating
+    await Promise.all(
+      topics.map(async (topic) => {
+        await db.topicRating.upsert({
+          where: {
+            topic_userId_courseId: {
+              topic,
+              userId,
+              courseId
+            }
+          },
+          update: {
+            rating: {
+              increment: baseRatingChange
+            },
+            submissionCount: {
+              increment: 1
+            },
+            updatedAt: new Date()
+          },
+          create: {
+            topic,
+            userId,
+            courseId,
+            rating: 1500 + baseRatingChange,
+            submissionCount: 1,
+            updatedAt: new Date()
+          }
+        });
+      })
+    );
+  } catch (error) {
+    console.error(`Error updating topic ratings for user ${studentId}:`, error);
+  }
+}
+
+/**
  * Ensure critical indexes exist for optimal sync performance
  */
 async function ensureCriticalIndexes(): Promise<void> {
@@ -453,6 +508,15 @@ async function processBulkSubmissions(
             if (userAccuracy === 0 || isNaN(userAccuracy)) {
               console.log(`📈 Rating change for ${userAccuracy === 0 ? 'zero accuracy' : 'NaN accuracy'}: User ${user.rating} → ${newUserRating} (${ratingChange > 0 ? '+' : ''}${ratingChange})`);
             }
+            
+            // Update topic ratings directly for each quiz topic
+            await updateTopicRatings(
+              user.id,
+              studentId,
+              courseId,
+              parsedQuiz.types,
+              userAccuracy
+            );
 
             quizRecords.push({
               userId: user.id,
@@ -480,6 +544,8 @@ async function processBulkSubmissions(
           }
 
           // Bulk operations within micro-transaction
+          // Note: We're still updating user ratings for backward compatibility,
+          // but the primary rating system is now topic-based
           await Promise.all([
             // Create quiz records
             tx.quiz.createMany({

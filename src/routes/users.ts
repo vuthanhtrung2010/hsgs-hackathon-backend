@@ -237,31 +237,48 @@ export const userRoutes = new Elysia({ prefix: "/api/users" })
           });
         }
 
-        // Calculate skills by question types
-        const typeRatings: Record<string, number[]> = {};
-
-        for (const quiz of user.quizzes) {
-          const question = quiz.question;
-
-          // Process each type for this question
-          for (const type of question.types) {
-            if (!typeRatings[type]) {
-              typeRatings[type] = [];
-            }
-            // Use the question rating as a measure of skill in this type
-            typeRatings[type].push(question.rating);
+        // Get topic ratings for this user from the database
+        const topicRatings = await db.topicRating.findMany({
+          where: {
+            userId: user.id,
+            courseId: user.courseId
           }
-        }
-
-        // Calculate average rating per type
+        });
+        
+        // Initialize clusters from topic ratings
         const skillsClusters: Record<string, number> = {};
-        for (const [type, ratings] of Object.entries(typeRatings)) {
-          if (ratings.length > 0) {
-            skillsClusters[type] =
-              ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length;
+        
+        if (topicRatings.length > 0) {
+          // Use the direct topic ratings from the database
+          for (const topicRating of topicRatings) {
+            skillsClusters[topicRating.topic] = topicRating.rating;
+          }
+        } else {
+          // Fallback to old method if no topic ratings exist yet
+          const typeRatings: Record<string, number[]> = {};
+          
+          for (const quiz of user.quizzes) {
+            const question = quiz.question;
+            
+            // Process each type for this question
+            for (const type of question.types) {
+              if (!typeRatings[type]) {
+                typeRatings[type] = [];
+              }
+              // Use the question rating as a measure of skill in this type
+              typeRatings[type].push(question.rating);
+            }
+          }
+          
+          // Calculate average rating per type
+          for (const [type, ratings] of Object.entries(typeRatings)) {
+            if (ratings.length > 0) {
+              skillsClusters[type] =
+                ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length;
+            }
           }
         }
-
+        
         // Update course clusters with calculated skills
         courseInfo.clusters = skillsClusters;
 
