@@ -149,7 +149,8 @@ export function parseQuiz(quizName: string): ParsedQuiz | null {
   // No pattern matches, just use lesson name and generate random difficulty
   if (remainingText.trim()) {
     // Generate random difficulty since none provided
-    const randomDifficulty = Math.random() * 100 + 1;
+    // const randomDifficulty = Math.random() * 100 + 1;
+    const randomDifficulty = 5 + 2; // A fixed default difficulty
 
     return {
       types,
