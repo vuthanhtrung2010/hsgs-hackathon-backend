@@ -5,6 +5,7 @@ import {
   fetchUserProfile,
   fetchAllCourses,
   fetchAllUsersFromCourse,
+  fetchSubmissionAttempt,
 } from "../utils/canvas.js";
 import { parseQuiz, type ParsedQuiz } from "../utils/parseQuiz.js";
 import { updateRatings } from "../utils/elo.js";
@@ -374,15 +375,41 @@ async function processBulkSubmissions(
   parsedQuiz: ParsedQuiz,
   courseId: string,
 ): Promise<void> {
-  // Filter valid submissions
-  const validSubmissions = submissions.filter(
-    (submission) =>
-      submission.finished_at &&
-      submission.workflow_state === "complete" &&
-      submission.score != null &&
-      submission.quiz_points_possible != null &&
-      submission.attempt === 1, // Only process first attempts
-  );
+  // Filter valid submissions and handle multiple attempts
+  const validSubmissions: CanvasSubmission[] = [];
+  
+  for (const submission of submissions) {
+    // Basic validation
+    if (
+      !submission.finished_at ||
+      submission.workflow_state !== "complete" ||
+      submission.score == null ||
+      submission.quiz_points_possible == null
+    ) {
+      continue;
+    }
+    
+    // If this is attempt 1, use it directly
+    if (submission.attempt === 1) {
+      validSubmissions.push(submission);
+    } else {
+      // For attempts > 1, fetch the attempt 1 data
+      console.log(`📝 Fetching attempt 1 data for submission ${submission.id} (attempt ${submission.attempt})`);
+      const attempt1Data = await fetchSubmissionAttempt(
+        courseId,
+        quiz.id.toString(),
+        submission.id.toString(),
+        1
+      );
+      
+      if (attempt1Data) {
+        console.log(`✅ Found attempt 1 data for submission ${submission.id}: score ${attempt1Data.score}/${attempt1Data.quiz_points_possible}`);
+        validSubmissions.push(attempt1Data);
+      } else {
+        console.warn(`❌ Could not fetch attempt 1 data for submission ${submission.id}, skipping`);
+      }
+    }
+  }
 
   // Debug logging for filtering
   const filteredOut = submissions.length - validSubmissions.length;

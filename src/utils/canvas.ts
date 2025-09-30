@@ -256,6 +256,32 @@ export async function fetchUserProfile(
 }
 
 /**
+ * Fetch a specific submission attempt
+ */
+export async function fetchSubmissionAttempt(
+  courseId: string,
+  quizId: string,
+  submissionId: string,
+  attempt: number,
+): Promise<CanvasSubmission | null> {
+  const url = new URL(
+    `/api/v1/courses/${courseId}/quizzes/${quizId}/submissions/${submissionId}`,
+    CANVAS_API_BASE_URL,
+  );
+  url.searchParams.set("attempt", attempt.toString());
+
+  const response = await fetch(url.toString(), { headers });
+
+  if (!response.ok) {
+    console.warn(`Failed to fetch submission attempt ${submissionId} attempt ${attempt}: ${response.statusText}`);
+    return null;
+  }
+
+  const data = (await response.json()) as any;
+  return data.quiz_submissions?.[0] || null;
+}
+
+/**
  * Get user avatar URL from Canvas
  */
 export async function fetchUserAvatar(userId: string): Promise<string> {
