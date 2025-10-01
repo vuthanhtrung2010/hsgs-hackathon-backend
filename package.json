@@ -7,10 +7,10 @@
     "dev": "bun run --watch index.ts",
     "start": "bun run index.ts",
     "db:generate": "bunx prisma generate",
-    "db:push": "bunx prisma db push",
-    "db:migrate": "bunx prisma migrate dev",
-    "db:reset": "bunx prisma migrate reset --force",
-    "db:studio": "bunx prisma studio"
+    "db:push": "bun x prisma db push",
+    "db:migrate": "bun x prisma migrate dev",
+    "db:reset": "bun x prisma migrate reset --force",
+    "db:studio": "bun x prisma studio"
   },
   "dependencies": {
     "@elysiajs/cors": "^1.4.0",
