@@ -2,11 +2,15 @@ import { Elysia } from "elysia";
 import { db } from "../db.js";
 
 export const rankingRoutes = new Elysia({ prefix: "/api/ranking" })
-  .get("/:courseId", async ({ params: { courseId } }) => {
+  .get("/:randomizedCourseId", async ({ params: { randomizedCourseId } }) => {
     try {
+      const realCourse = await db.course.findUnique({
+        where: { randomId: randomizedCourseId },
+        select: { id: true, name: true },
+      });
       // Get all users for the specified course
       const users = await db.canvasUser.findMany({
-        where: { courseId },
+        where: { courseId: realCourse?.id },
         select: {
           id: true,
           studentId: true,
@@ -14,7 +18,7 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" })
           shortName: true,
           topicRatings: {
             where: {
-              courseId: courseId,
+              courseId: realCourse?.id,
             },
             select: {
               rating: true,
@@ -28,7 +32,7 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" })
             },
             where: {
               question: {
-                courseId: courseId,
+                courseId: realCourse?.id,
               },
             },
           },
@@ -39,13 +43,7 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" })
         return [];
       }
 
-      // Get course information
-      const course = await db.course.findUnique({
-        where: { id: courseId },
-        select: { name: true },
-      });
-
-      const courseName = course?.name || `Course ${courseId}`;
+      const courseName = realCourse?.name || `Course ${realCourse?.id}`;
 
       // Calculate average rating as weighted average of topic ratings for each user
       const ranking = users
@@ -72,7 +70,7 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" })
             name: user.name,
             shortName: user.shortName,
             course: {
-              courseId: parseInt(courseId),
+              courseId: parseInt(realCourse?.id || "0"),
               courseName,
               rating: Math.round(averageRating), // Weighted average rating across all topics
               quizzesCompleted: user.quizzes.length, // Number of completed quizzes
@@ -83,7 +81,7 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" })
 
       return ranking;
     } catch (error) {
-      console.error(`Error getting ranking for course ${courseId}:`, error);
+      console.error(`Error getting ranking for course ${randomizedCourseId}:`, error);
       return { error: "Internal server error" };
     }
   })

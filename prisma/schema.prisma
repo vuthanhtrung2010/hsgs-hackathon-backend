@@ -12,10 +12,10 @@ datasource db {
 
 model CanvasUser {
   id           Int           @id @default(autoincrement())
-  studentId    String        // Canvas user ID
+  studentId    String // Canvas user ID
   name         String
   shortName    String
-  courseId     String        // Canvas course ID
+  courseId     String // Canvas course ID
   rating       Float         @default(1500)
   quizzes      Quiz[]
   topicRatings TopicRating[]
@@ -35,8 +35,8 @@ model Question {
   courseId        String // Canvas course ID
   types           String[] // Array of quiz types (e.g., ["Bài tập", "Kiểm tra"])
   lesson          String? // Lesson name
-  difficulty      Float?  // Difficulty level
-  class           Int?    // Class number
+  difficulty      Float? // Difficulty level
+  class           Int? // Class number
   rating          Float    @default(1500)
   submissionCount Int      @default(0)
   quizzes         Quiz[]
@@ -69,6 +69,7 @@ model Quiz {
 }
 
 model Course {
+  randomId  String   @unique @default(cuid())
   id        String   @id // Canvas course ID
   name      String
   createdAt DateTime @default(now())
@@ -170,10 +171,10 @@ model Verification {
 
 model TopicRating {
   id              Int        @id @default(autoincrement())
-  topic           String     // Topic name like "Reading", "Math", etc.
-  userId          Int        // Reference to CanvasUser
+  topic           String // Topic name like "Reading", "Math", etc.
+  userId          Int // Reference to CanvasUser
   user            CanvasUser @relation(fields: [userId], references: [id], onDelete: Cascade)
-  courseId        String     // Canvas course ID
+  courseId        String // Canvas course ID
   rating          Float      @default(1500)
   submissionCount Int        @default(0)
   createdAt       DateTime   @default(now())

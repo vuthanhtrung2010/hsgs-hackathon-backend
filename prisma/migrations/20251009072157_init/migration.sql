@@ -6,7 +6,6 @@ CREATE TABLE "public"."users" (
     "shortName" TEXT NOT NULL,
     "courseId" TEXT NOT NULL,
     "rating" DOUBLE PRECISION NOT NULL DEFAULT 1500,
-    "cluster" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -19,7 +18,10 @@ CREATE TABLE "public"."questions" (
     "quizId" TEXT NOT NULL,
     "quizName" TEXT NOT NULL,
     "courseId" TEXT NOT NULL,
-    "cluster" TEXT NOT NULL,
+    "types" TEXT[],
+    "lesson" TEXT,
+    "difficulty" DOUBLE PRECISION,
+    "class" INTEGER,
     "rating" DOUBLE PRECISION NOT NULL DEFAULT 1500,
     "submissionCount" INTEGER NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -44,6 +46,7 @@ CREATE TABLE "public"."quizzes" (
 
 -- CreateTable
 CREATE TABLE "public"."courses" (
+    "randomId" TEXT NOT NULL,
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -61,6 +64,17 @@ CREATE TABLE "public"."classes" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "classes_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."announcements" (
+    "id" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "content" TEXT NOT NULL DEFAULT '',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "announcements_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -132,17 +146,31 @@ CREATE TABLE "public"."verification" (
     CONSTRAINT "verification_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "public"."topic_ratings" (
+    "id" SERIAL NOT NULL,
+    "topic" TEXT NOT NULL,
+    "userId" INTEGER NOT NULL,
+    "courseId" TEXT NOT NULL,
+    "rating" DOUBLE PRECISION NOT NULL DEFAULT 1500,
+    "submissionCount" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "topic_ratings_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
-CREATE INDEX "users_courseId_cluster_idx" ON "public"."users"("courseId", "cluster");
+CREATE INDEX "users_courseId_idx" ON "public"."users"("courseId");
 
 -- CreateIndex
 CREATE INDEX "users_studentId_idx" ON "public"."users"("studentId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "users_studentId_courseId_cluster_key" ON "public"."users"("studentId", "courseId", "cluster");
+CREATE UNIQUE INDEX "users_studentId_courseId_key" ON "public"."users"("studentId", "courseId");
 
 -- CreateIndex
-CREATE INDEX "questions_courseId_cluster_idx" ON "public"."questions"("courseId", "cluster");
+CREATE INDEX "questions_courseId_idx" ON "public"."questions"("courseId");
 
 -- CreateIndex
 CREATE INDEX "questions_quizId_idx" ON "public"."questions"("quizId");
@@ -160,6 +188,9 @@ CREATE INDEX "quizzes_questionId_idx" ON "public"."quizzes"("questionId");
 CREATE UNIQUE INDEX "quizzes_userId_questionId_key" ON "public"."quizzes"("userId", "questionId");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "courses_randomId_key" ON "public"."courses"("randomId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "sync_history_courseId_key" ON "public"."sync_history"("courseId");
 
 -- CreateIndex
@@ -167,6 +198,15 @@ CREATE UNIQUE INDEX "user_email_key" ON "public"."user"("email");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "session_token_key" ON "public"."session"("token");
+
+-- CreateIndex
+CREATE INDEX "topic_ratings_userId_idx" ON "public"."topic_ratings"("userId");
+
+-- CreateIndex
+CREATE INDEX "topic_ratings_courseId_idx" ON "public"."topic_ratings"("courseId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "topic_ratings_topic_userId_courseId_key" ON "public"."topic_ratings"("topic", "userId", "courseId");
 
 -- AddForeignKey
 ALTER TABLE "public"."quizzes" ADD CONSTRAINT "quizzes_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -179,3 +219,6 @@ ALTER TABLE "public"."session" ADD CONSTRAINT "session_userId_fkey" FOREIGN KEY 
 
 -- AddForeignKey
 ALTER TABLE "public"."account" ADD CONSTRAINT "account_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."topic_ratings" ADD CONSTRAINT "topic_ratings_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."users"("id") ON DELETE CASCADE ON UPDATE CASCADE;

@@ -30,6 +30,7 @@ export const courseRoutes = new Elysia({ prefix: "/api/courses" }).get(
         select: {
           id: true,
           name: true,
+          randomId: true,
         },
         orderBy: {
           name: "asc",
@@ -39,6 +40,7 @@ export const courseRoutes = new Elysia({ prefix: "/api/courses" }).get(
       // Add canvasUrl to each course
       const coursesWithUrl = courses.map((course) => ({
         id: course.id,
+        randomizedId: course.randomId,
         name: course.name,
         canvasUrl: `${env.CANVAS_BASE_URL}/courses/${course.id}`,
       }));
