@@ -1,20 +1,21 @@
 import { Elysia } from "elysia";
 import { db } from "../db.js";
-import { env } from "../env.js";
+import { requireAdmin } from "../middleware/auth.js";
 
 export const adminRoutes = new Elysia({ prefix: "/api/admin" })
-
   // Get dashboard stats
-  .get("/stats", async () => {
+  .get("/stats", async ({ request }) => {
+    const authResult = await requireAdmin(request);
+    if (!authResult.success) {
+      return {
+        success: false,
+        error: authResult.error,
+      };
+    }
+
     try {
-      const [classCount, totalStudents, canvasUserCount, announcementCount] =
+      const [canvasUserCount, announcementCount] =
         await Promise.all([
-          db.class.count(),
-          db.class
-            .findMany()
-            .then((classes) =>
-              classes.reduce((total, cls) => total + cls.students.length, 0),
-            ),
           db.canvasUser.count(),
           db.announcement.count(),
         ]);
@@ -22,8 +23,6 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
       return {
         success: true,
         stats: {
-          classCount,
-          totalStudents,
           canvasUserCount,
           announcementCount,
         },
@@ -37,168 +36,17 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
     }
   })
 
-  // Get all classes with member counts
-  .get("/classes", async () => {
-    try {
-      const classes = await db.class.findMany({
-        orderBy: {
-          name: "asc",
-        },
-      });
-
-      // Add member counts (length of students array)
-      const classesWithCounts = classes.map((classItem) => ({
-        id: classItem.id,
-        name: classItem.name,
-        memberCount: classItem.students.length,
-        createdAt: classItem.createdAt,
-        updatedAt: classItem.updatedAt,
-      }));
-
-      return {
-        success: true,
-        classes: classesWithCounts,
-      };
-    } catch (error) {
-      console.error("Error fetching classes:", error);
-      return {
-        success: false,
-        error: "Failed to fetch classes",
-      };
-    }
-  })
-
-  // Create a new class
-  .post("/classes", async ({ body }: { body: any }) => {
-    try {
-      const { name, userNames } = body;
-
-      if (!name) {
-        return {
-          success: false,
-          error: "Class name is required",
-        };
-      }
-
-      // Parse user names into array
-      let students: string[] = [];
-      if (userNames && typeof userNames === "string") {
-        students = userNames
-          .split(",")
-          .map((name: string) => name.trim())
-          .filter((name: string) => name.length > 0);
-      }
-
-      // Create the class
-      const newClass = await db.class.create({
-        data: {
-          name: name,
-          students: students,
-        },
-      });
-
-      return {
-        success: true,
-        class: newClass,
-        message: `Class "${name}" created successfully with ${students.length} students`,
-      };
-    } catch (error) {
-      console.error("Error creating class:", error);
-      return {
-        success: false,
-        error: "Failed to create class",
-      };
-    }
-  })
-
-  // Get class details with members
-  .get("/classes/:id", async ({ params }: { params: { id: string } }) => {
-    try {
-      const classDetails = await db.class.findUnique({
-        where: { id: params.id },
-      });
-
-      if (!classDetails) {
-        return {
-          success: false,
-          error: "Class not found",
-        };
-      }
-
-      return {
-        success: true,
-        class: {
-          id: classDetails.id,
-          name: classDetails.name,
-          students: classDetails.students,
-          memberCount: classDetails.students.length,
-          createdAt: classDetails.createdAt,
-          updatedAt: classDetails.updatedAt,
-        },
-      };
-    } catch (error) {
-      console.error("Error fetching class details:", error);
-      return {
-        success: false,
-        error: "Failed to fetch class details",
-      };
-    }
-  })
-
-  // Update class students
-  .put(
-    "/classes/:id",
-    async ({ params, body }: { params: { id: string }; body: any }) => {
-      try {
-        const { students } = body;
-
-        if (!Array.isArray(students)) {
-          return {
-            success: false,
-            error: "Students must be an array",
-          };
-        }
-
-        // Validate that all students are strings
-        const validStudents = students
-          .filter(
-            (student: any) =>
-              typeof student === "string" && student.trim().length > 0,
-          )
-          .map((student: string) => student.trim());
-
-        const updatedClass = await db.class.update({
-          where: { id: params.id },
-          data: {
-            students: validStudents,
-          },
-        });
-
-        return {
-          success: true,
-          class: {
-            id: updatedClass.id,
-            name: updatedClass.name,
-            students: updatedClass.students,
-            memberCount: updatedClass.students.length,
-            createdAt: updatedClass.createdAt,
-            updatedAt: updatedClass.updatedAt,
-          },
-          message: `Class updated successfully with ${validStudents.length} students`,
-        };
-      } catch (error) {
-        console.error("Error updating class:", error);
-        return {
-          success: false,
-          error: "Failed to update class",
-        };
-      }
-    },
-  )
-
   // Announcement routes
   // Get all announcements
-  .get("/announcements", async () => {
+  .get("/announcements", async ({ request }) => {
+    const authResult = await requireAdmin(request);
+    if (!authResult.success) {
+      return {
+        success: false,
+        error: authResult.error,
+      };
+    }
+
     try {
       const announcements = await db.announcement.findMany({
         orderBy: {
@@ -220,7 +68,15 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
   })
 
   // Create announcement
-  .post("/announcements", async ({ body }: { body: any }) => {
+  .post("/announcements", async ({ request, body }: { request: Request; body: any }) => {
+    const authResult = await requireAdmin(request);
+    if (!authResult.success) {
+      return {
+        success: false,
+        error: authResult.error,
+      };
+    }
+
     try {
       const { title } = body;
 
@@ -252,7 +108,15 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
   })
 
   // Get single announcement
-  .get("/announcements/:id", async ({ params }: { params: { id: string } }) => {
+  .get("/announcements/:id", async ({ request, params }: { request: Request; params: { id: string } }) => {
+    const authResult = await requireAdmin(request);
+    if (!authResult.success) {
+      return {
+        success: false,
+        error: authResult.error,
+      };
+    }
+
     try {
       const announcement = await db.announcement.findUnique({
         where: { id: params.id },
@@ -281,7 +145,15 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
   // Update announcement
   .put(
     "/announcements/:id",
-    async ({ params, body }: { params: { id: string }; body: any }) => {
+    async ({ request, params, body }: { request: Request; params: { id: string }; body: any }) => {
+      const authResult = await requireAdmin(request);
+      if (!authResult.success) {
+        return {
+          success: false,
+          error: authResult.error,
+        };
+      }
+
       try {
         const { title, content } = body;
 
@@ -317,7 +189,15 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
   // Delete announcement
   .delete(
     "/announcements/:id",
-    async ({ params }: { params: { id: string } }) => {
+    async ({ request, params }: { request: Request; params: { id: string } }) => {
+      const authResult = await requireAdmin(request);
+      if (!authResult.success) {
+        return {
+          success: false,
+          error: authResult.error,
+        };
+      }
+
       try {
         await db.announcement.delete({
           where: { id: params.id },
@@ -338,7 +218,15 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
   )
 
   // Get all users (better-auth users)
-  .get("/users", async () => {
+  .get("/users", async ({ request }) => {
+    const authResult = await requireAdmin(request);
+    if (!authResult.success) {
+      return {
+        success: false,
+        error: authResult.error,
+      };
+    }
+
     try {
       const users = await db.user.findMany({
         select: {
@@ -368,8 +256,16 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
     }
   })
 
-  // Get specific user by ID
-  .get("/users/:id", async ({ params }: { params: { id: string } }) => {
+  // Get specific user by ID (better-auth user)
+  .get("/users/:id", async ({ request, params }: { request: Request; params: { id: string } }) => {
+    const authResult = await requireAdmin(request);
+    if (!authResult.success) {
+      return {
+        success: false,
+        error: authResult.error,
+      };
+    }
+
     try {
       const user = await db.user.findUnique({
         where: { id: params.id },
@@ -404,10 +300,18 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
     }
   })
 
-  // Update user information
+  // Update user information (better-auth user)
   .put(
     "/users/:id",
-    async ({ params, body }: { params: { id: string }; body: any }) => {
+    async ({ request, params, body }: { request: Request; params: { id: string }; body: any }) => {
+      const authResult = await requireAdmin(request);
+      if (!authResult.success) {
+        return {
+          success: false,
+          error: authResult.error,
+        };
+      }
+
       try {
         const { name, email } = body;
 
@@ -469,4 +373,59 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
         };
       }
     },
-  );
+  )
+
+  // Get all courses with admin access
+  .get("/courses", async ({ request }) => {
+    const authResult = await requireAdmin(request);
+    if (!authResult.success) {
+      return {
+        success: false,
+        error: authResult.error,
+      };
+    }
+
+    try {
+      const courses = await db.course.findMany({
+        select: {
+          id: true,
+          name: true,
+          randomId: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        orderBy: {
+          name: "asc",
+        },
+      });
+
+      // Get counts separately for each course
+      const coursesWithCounts = await Promise.all(
+        courses.map(async (course) => {
+          const [canvasUsersCount, questionsCount] = await Promise.all([
+            db.canvasUser.count({ where: { courseId: course.id } }),
+            db.question.count({ where: { courseId: course.id } }),
+          ]);
+
+          return {
+            ...course,
+            _count: {
+              canvasUsers: canvasUsersCount,
+              questions: questionsCount,
+            },
+          };
+        })
+      );
+
+      return {
+        success: true,
+        courses: coursesWithCounts,
+      };
+    } catch (error) {
+      console.error("Error fetching courses:", error);
+      return {
+        success: false,
+        error: "Failed to fetch courses",
+      };
+    }
+  });
