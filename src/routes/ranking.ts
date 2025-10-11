@@ -1,19 +1,20 @@
 import { Elysia } from "elysia";
 import { db } from "../db.js";
 
-export const rankingRoutes = new Elysia({ prefix: "/api/ranking" })
-  .get("/:randomizedCourseId", async ({ params: { randomizedCourseId }, set }) => {
+export const rankingRoutes = new Elysia({ prefix: "/api/ranking" }).get(
+  "/:randomizedCourseId",
+  async ({ params: { randomizedCourseId }, set }) => {
     try {
       const realCourse = await db.course.findUnique({
         where: { randomId: randomizedCourseId },
-        select: { id: true, name: true },
+        select: { id: true, name: true, quote: true, quoteAuthor: true },
       });
 
       if (!realCourse) {
         set.status = 404;
-        return { 
+        return {
           error: "Course not found",
-          message: `No course found with randomized ID: ${randomizedCourseId}`
+          message: `No course found with randomized ID: ${randomizedCourseId}`,
         };
       }
 
@@ -58,17 +59,18 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" })
       const ranking = users
         .map((user) => {
           let averageRating = 1500; // Default rating
-          
+
           // Calculate weighted average of topic ratings if available
           if (user.topicRatings.length > 0) {
             let totalRatingSum = 0;
             let totalSubmissions = 0;
-            
+
             for (const topicRating of user.topicRatings) {
-              totalRatingSum += topicRating.rating * topicRating.submissionCount;
+              totalRatingSum +=
+                topicRating.rating * topicRating.submissionCount;
               totalSubmissions += topicRating.submissionCount;
             }
-            
+
             if (totalSubmissions > 0) {
               averageRating = totalRatingSum / totalSubmissions;
             }
@@ -83,6 +85,8 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" })
               courseName,
               rating: Math.round(averageRating), // Weighted average rating across all topics
               quizzesCompleted: user.quizzes.length, // Number of completed quizzes
+              quote: realCourse.quote, // Course quote
+              quoteAuthor: realCourse.quoteAuthor,
             },
           };
         })
@@ -90,8 +94,12 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" })
 
       return ranking;
     } catch (error) {
-      console.error(`Error getting ranking for course ${randomizedCourseId}:`, error);
+      console.error(
+        `Error getting ranking for course ${randomizedCourseId}:`,
+        error
+      );
       set.status = 500;
       return { error: "Internal server error" };
     }
-  })
+  }
+);

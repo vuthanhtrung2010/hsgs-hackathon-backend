@@ -70,12 +70,13 @@ model Quiz {
 }
 
 model Course {
-  randomId  String   @unique @default(cuid())
-  id        String   @id
-  name      String
-  quote     String?  @default("Thi đua là yêu nước, yêu nước phải thi đua - Bác Hồ")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  randomId    String   @unique @default(cuid())
+  id          String   @id
+  name        String
+  quote       String?  @default("Thi đua là yêu nước, yêu nước phải thi đua")
+  quoteAuthor String?  @default("Bác Hồ")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@map("courses")
 }
