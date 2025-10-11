@@ -147,6 +147,71 @@ export const userRoutes = new Elysia({ prefix: "/api/users" })
       }
     },
   )
+  .get("/details/:userId/submissions", async ({ params: { userId } }) => {
+    try {
+      // Get all users with this studentId across all courses
+      const users = await db.canvasUser.findMany({
+        where: { studentId: userId },
+        include: {
+          quizzes: {
+            orderBy: { submittedAt: "desc" },
+            include: {
+              question: true,
+            },
+          },
+        },
+      });
+
+      if (!users.length) {
+        return { error: "User not found" };
+      }
+
+      // Get Canvas base URL from env
+      const canvasBaseUrl = process.env.CANVAS_BASE_URL || "";
+
+      // Collect all submissions from all courses
+      const submissions = users.flatMap((user) =>
+        user.quizzes.map((quiz) => ({
+          id: quiz.id,
+          submissionId: quiz.submissionId,
+          quizId: quiz.question.quizId,
+          quizName: quiz.question.lesson || quiz.question.quizName,
+          courseId: user.courseId,
+          courseName: "", // Will be filled from Course table
+          score: quiz.score,
+          maxScore: quiz.maxScore,
+          rating: quiz.question.rating,
+          submittedAt: quiz.submittedAt,
+          // Construct the LMS submission URL
+          submissionUrl: `${canvasBaseUrl}/courses/${user.courseId}/quizzes/${quiz.question.quizId}/history?quiz_submission_id=${quiz.submissionId}&version=1`,
+        }))
+      );
+
+      // Get course names
+      const courseIds = [...new Set(users.map((u) => u.courseId))];
+      const courses = await db.course.findMany({
+        where: { id: { in: courseIds } },
+        select: { id: true, name: true },
+      });
+
+      const courseMap = new Map(courses.map((c) => [c.id, c.name]));
+
+      // Fill in course names
+      submissions.forEach((sub) => {
+        sub.courseName = courseMap.get(sub.courseId) || `Course ${sub.courseId}`;
+      });
+
+      return {
+        success: true,
+        submissions,
+        total: submissions.length,
+      };
+    } catch (error) {
+      console.error("Error fetching user submissions:", error);
+      return { error: "Internal server error" };
+    }
+  })
+
   .get("/details/:userId", async ({ params: { userId } }) => {
     try {
       // Get user data across all courses

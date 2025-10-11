@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ma/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -12,66 +9,71 @@ datasource db {
 
 model CanvasUser {
   id           Int           @id @default(autoincrement())
-  studentId    String // Canvas user ID
+  studentId    String
   name         String
   shortName    String
-  courseId     String // Canvas course ID
+  courseId     String
   rating       Float         @default(1500)
-  quizzes      Quiz[]
-  topicRatings TopicRating[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
+  quizzes      Quiz[]
+  topicRatings TopicRating[]
 
   @@unique([studentId, courseId])
   @@index([courseId])
   @@index([studentId])
+  @@index([studentId, courseId], map: "idx_users_student_course")
   @@map("users")
 }
 
 model Question {
   id              Int      @id @default(autoincrement())
-  quizId          String // Canvas quiz ID
+  quizId          String
   quizName        String
-  courseId        String // Canvas course ID
-  types           String[] // Array of quiz types (e.g., ["Bài tập", "Kiểm tra"])
-  lesson          String? // Lesson name
-  difficulty      Float? // Difficulty level
-  class           Int? // Class number
+  courseId        String
+  types           String[]
+  lesson          String?
+  difficulty      Float?
+  class           Int?
   rating          Float    @default(1500)
   submissionCount Int      @default(0)
-  quizzes         Quiz[]
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  quizzes         Quiz[]
 
   @@unique([quizId, courseId])
   @@index([courseId])
   @@index([quizId])
+  @@index([courseId, quizId], map: "idx_questions_course_quiz")
   @@map("questions")
 }
 
 model Quiz {
-  id           Int      @id @default(autoincrement())
+  id           Int        @id @default(autoincrement())
   userId       Int
   questionId   Int
+  submissionId String     @unique
   score        Float
   maxScore     Float
   submittedAt  DateTime
-  ratingChange Float    @default(0)
-  createdAt    DateTime @default(now())
-
-  user     CanvasUser @relation(fields: [userId], references: [id], onDelete: Cascade)
-  question Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  ratingChange Float      @default(0)
+  createdAt    DateTime   @default(now())
+  question     Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  user         CanvasUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, questionId])
   @@index([userId])
   @@index([questionId])
+  @@index([userId, questionId], map: "idx_quizzes_user_question")
+  @@index([userId, questionId], map: "idx_quizzes_userid_include")
   @@map("quizzes")
 }
 
 model Course {
   randomId  String   @unique @default(cuid())
-  id        String   @id // Canvas course ID
+  id        String   @id
   name      String
+  quote     String?  @default("Thi đua là yêu nước, yêu nước phải thi đua - Bác Hồ")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -90,34 +92,33 @@ model Announcement {
 
 model SyncHistory {
   id        Int      @id @default(autoincrement())
-  courseId  String // Canvas course ID
+  courseId  String   @unique
   lastSync  DateTime
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([courseId])
+  @@index([courseId], map: "idx_sync_history_course")
   @@map("sync_history")
 }
 
 model User {
   id            String    @id
   name          String
-  email         String
+  email         String    @unique
   emailVerified Boolean   @default(false)
   image         String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @default(now()) @updatedAt
-  sessions      Session[]
   accounts      Account[]
+  sessions      Session[]
 
-  @@unique([email])
   @@map("user")
 }
 
 model Session {
   id        String   @id
   expiresAt DateTime
-  token     String
+  token     String   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   ipAddress String?
@@ -125,7 +126,6 @@ model Session {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([token])
   @@map("session")
 }
 
@@ -134,7 +134,6 @@ model Account {
   accountId             String
   providerId            String
   userId                String
-  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   accessToken           String?
   refreshToken          String?
   idToken               String?
@@ -144,6 +143,7 @@ model Account {
   password              String?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("account")
 }
@@ -161,14 +161,14 @@ model Verification {
 
 model TopicRating {
   id              Int        @id @default(autoincrement())
-  topic           String // Topic name like "Reading", "Math", etc.
-  userId          Int // Reference to CanvasUser
-  user            CanvasUser @relation(fields: [userId], references: [id], onDelete: Cascade)
-  courseId        String // Canvas course ID
+  topic           String
+  userId          Int
+  courseId        String
   rating          Float      @default(1500)
   submissionCount Int        @default(0)
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
+  user            CanvasUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([topic, userId, courseId])
   @@index([userId])

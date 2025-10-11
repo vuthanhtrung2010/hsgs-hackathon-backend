@@ -548,6 +548,7 @@ async function processBulkSubmissions(
             quizRecords.push({
               userId: user.id,
               questionId: question.id,
+              submissionId: submission.id.toString(),
               score: submission.score!,
               maxScore: submission.quiz_points_possible!,
               submittedAt: new Date(submission.finished_at!),
