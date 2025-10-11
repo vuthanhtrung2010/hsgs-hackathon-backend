@@ -16,12 +16,9 @@ export const courseRoutes = new Elysia({ prefix: "/api/courses" }).get(
           create: {
             id: course.id,
             name: course.name,
-            createdAt: new Date(),
-            updatedAt: new Date(),
           },
           update: {
             name: course.name,
-            updatedAt: new Date(),
           },
         });
       }

@@ -7,7 +7,14 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" }).get(
     try {
       const realCourse = await db.course.findUnique({
         where: { randomId: randomizedCourseId },
-        select: { id: true, name: true, quote: true, quoteAuthor: true },
+        select: { 
+          id: true, 
+          name: true, 
+          quote: true, 
+          quoteAuthor: true,
+          assignmentCount: true,
+          showDebt: true,
+        },
       });
 
       if (!realCourse) {
@@ -55,6 +62,18 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" }).get(
 
       const courseName = realCourse.name || `Course ${realCourse.id}`;
 
+      // Calculate max quizzes completed by any user
+      const maxQuizzesCompleted = Math.max(
+        ...users.map((u) => u.quizzes.length),
+        0
+      );
+
+      // Check if debt calculation is valid
+      const isDebtValid = 
+        realCourse.showDebt && 
+        realCourse.assignmentCount > 0 && 
+        maxQuizzesCompleted <= realCourse.assignmentCount;
+
       // Calculate average rating as weighted average of topic ratings for each user
       const ranking = users
         .map((user) => {
@@ -76,6 +95,11 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" }).get(
             }
           }
 
+          const quizzesCompleted = user.quizzes.length;
+          const debt = isDebtValid 
+            ? Math.max(0, realCourse.assignmentCount - quizzesCompleted)
+            : 0;
+
           return {
             id: parseInt(user.studentId), // Canvas user ID as number
             name: user.name,
@@ -84,9 +108,12 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" }).get(
               courseId: parseInt(realCourse.id || "0"),
               courseName,
               rating: Math.round(averageRating), // Weighted average rating across all topics
-              quizzesCompleted: user.quizzes.length, // Number of completed quizzes
+              quizzesCompleted, // Number of completed quizzes
+              debt, // Number of assignments not completed
               quote: realCourse.quote, // Course quote
               quoteAuthor: realCourse.quoteAuthor,
+              showDebt: realCourse.showDebt,
+              assignmentCount: realCourse.assignmentCount,
             },
           };
         })

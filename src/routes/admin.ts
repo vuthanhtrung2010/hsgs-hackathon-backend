@@ -391,6 +391,10 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
           id: true,
           name: true,
           randomId: true,
+          quote: true,
+          quoteAuthor: true,
+          assignmentCount: true,
+          showDebt: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -428,4 +432,44 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
         error: "Failed to fetch courses",
       };
     }
-  });
+  })
+
+  // Update course details
+  .put(
+    "/courses/:id",
+    async ({ request, params, body }: { request: Request; params: { id: string }; body: any }) => {
+      const authResult = await requireAdmin(request);
+      if (!authResult.success) {
+        return {
+          success: false,
+          error: authResult.error,
+        };
+      }
+
+      try {
+        const { quote, quoteAuthor, showDebt } = body;
+
+        const updatedCourse = await db.course.update({
+          where: { id: params.id },
+          data: {
+            quote: quote !== undefined ? quote : undefined,
+            quoteAuthor: quoteAuthor !== undefined ? quoteAuthor : undefined,
+            showDebt: showDebt !== undefined ? showDebt : undefined,
+            updatedAt: new Date(),
+          },
+        });
+
+        return {
+          success: true,
+          course: updatedCourse,
+          message: "Course updated successfully",
+        };
+      } catch (error) {
+        console.error("Error updating course:", error);
+        return {
+          success: false,
+          error: "Failed to update course",
+        };
+      }
+    },
+  );

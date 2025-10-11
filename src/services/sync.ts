@@ -6,6 +6,7 @@ import {
   fetchAllCourses,
   fetchAllUsersFromCourse,
   fetchSubmissionAttempt,
+  countAssignments,
 } from "../utils/canvas.js";
 import { parseQuiz, type ParsedQuiz } from "../utils/parseQuiz.js";
 import { updateRatings } from "../utils/elo.js";
@@ -139,22 +140,31 @@ async function syncCourseInfo(courseId: string) {
 
     const courseData = (await response.json()) as { name?: string; id: string };
 
+    // Fetch assignment count for the course
+    console.log(`📊 Fetching assignment count for course ${courseId}...`);
+    let assignmentCount = 0;
+    try {
+      assignmentCount = await countAssignments(courseId);
+      console.log(`✅ Found ${assignmentCount} published assignments in course ${courseId}`);
+    } catch (error) {
+      console.warn(`⚠️  Failed to fetch assignment count for course ${courseId}:`, error);
+    }
+
     // Use upsert for better performance - single DB operation instead of find + update/create
     const course = await db.course.upsert({
       where: { id: courseId },
       update: {
         name: courseData.name || `Course ${courseId}`,
-        updatedAt: new Date(),
+        assignmentCount,
       },
       create: {
         id: courseId,
         name: courseData.name || `Course ${courseId}`,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        assignmentCount,
       },
     });
 
-    console.log(`Synced course ${courseId}: ${course.name}`);
+    console.log(`Synced course ${courseId}: ${course.name} (${assignmentCount} assignments)`);
   } catch (error) {
     console.error(`Error syncing course ${courseId}:`, error);
   }

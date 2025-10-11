@@ -301,3 +301,29 @@ export async function fetchUserAvatar(userId: string): Promise<string> {
     return "";
   }
 }
+
+export async function countAssignments(courseId: string): Promise<number> {
+  let page = 1;
+  let totalAssignments = 0;
+
+  while (true) {
+    const url = new URL(
+      `/api/v1/courses/${courseId}/assignments`,
+      CANVAS_API_BASE_URL,
+    );
+    url.searchParams.set("per_page", "100");
+    url.searchParams.set("page", page.toString());
+
+    const response = await fetch(url.toString(), { headers });
+    if (!response.ok) throw new Error(`Failed to fetch assignments: ${response.statusText}`);
+
+    const assignments = (await response.json()) as any[];
+    totalAssignments += assignments.filter(a => a.workflow_state === "published").length;
+
+    const linkHeader = response.headers.get("link");
+    if (!linkHeader || !linkHeader.includes('rel="next"')) break;
+    page++;
+  }
+
+  return totalAssignments;
+}
