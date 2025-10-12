@@ -2,11 +2,16 @@ import { Elysia } from "elysia";
 import { db } from "../db.js";
 import { fetchAllCourses } from "../utils/canvas.js";
 import { env } from "../env.js";
+import { requireAuth } from "../middleware/auth.js";
 
 export const courseRoutes = new Elysia({ prefix: "/api/courses" }).get(
   "/",
-  async () => {
+  async ({ request }) => {
     try {
+      // Check if user is authenticated
+      const authResult = await requireAuth(request);
+      const isAuthenticated = authResult.success;
+
       // Fetch all courses from Canvas and ensure they exist in database
       const canvasCourses = await fetchAllCourses();
 
@@ -27,26 +32,28 @@ export const courseRoutes = new Elysia({ prefix: "/api/courses" }).get(
         select: {
           id: true,
           name: true,
+          randomId: true,
         },
         orderBy: {
           name: "asc",
         },
       });
 
-      // Add canvasUrl to each course
+      // Only include randomId if authenticated
       const coursesWithUrl = courses.map((course) => ({
         id: course.id,
         name: course.name,
+        ...(isAuthenticated && { randomId: course.randomId }),
         canvasUrl: `${env.CANVAS_BASE_URL}/courses/${course.id}`,
       }));
 
       return coursesWithUrl;
     } catch (error) {
       console.error("Error getting courses:", error);
-      return { 
+      return {
         success: false,
-        error: "Internal server error" 
+        error: "Internal server error",
       };
     }
-  },
+  }
 );
