@@ -27,12 +27,12 @@ model CanvasUser {
 }
 
 model Question {
-  id              Int      @id @default(autoincrement())
+  id              Int      @id @default(autoincrement()) // id in LMS
   quizId          String
-  quizName        String
-  courseId        String
+  quizName        String // The full name for the quiz
+  courseId        String // course ID in lms
   types           String[]
-  lesson          String?
+  lesson          String? // the shorted name, removed the types, only keep real name
   difficulty      Float?
   class           Int?
   rating          Float    @default(1500)
@@ -70,15 +70,16 @@ model Quiz {
 }
 
 model Course {
-  randomId        String   @unique @default(cuid())
-  id              String   @id
+  randomId        String         @unique @default(cuid())
+  id              String         @id
   name            String
-  quote           String?  @default("Thi đua là yêu nước, yêu nước phải thi đua")
-  quoteAuthor     String?  @default("Bác Hồ")
-  assignmentCount Int      @default(0)
-  showDebt        Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  quote           String?        @default("Thi đua là yêu nước, yêu nước phải thi đua")
+  quoteAuthor     String?        @default("Bác Hồ")
+  assignmentCount Int            @default(0)
+  showDebt        Boolean        @default(false)
+  announcements   Announcement[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
   @@map("courses")
 }
@@ -86,10 +87,13 @@ model Course {
 model Announcement {
   id        String   @id @default(cuid())
   title     String
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
   content   String   @default("")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([courseId], map: "idx_announcements_course")
   @@map("announcements")
 }
 

@@ -14,11 +14,10 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
     }
 
     try {
-      const [canvasUserCount, announcementCount] =
-        await Promise.all([
-          db.canvasUser.count(),
-          db.announcement.count(),
-        ]);
+      const [canvasUserCount, announcementCount] = await Promise.all([
+        db.canvasUser.count(),
+        db.announcement.count(),
+      ]);
 
       return {
         success: true,
@@ -37,115 +36,166 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
   })
 
   // Announcement routes
-  // Get all announcements
-  .get("/announcements", async ({ request }) => {
-    const authResult = await requireAdmin(request);
-    if (!authResult.success) {
-      return {
-        success: false,
-        error: authResult.error,
-      };
-    }
-
-    try {
-      const announcements = await db.announcement.findMany({
-        orderBy: {
-          createdAt: "desc",
-        },
-      });
-
-      return {
-        success: true,
-        announcements,
-      };
-    } catch (error) {
-      console.error("Error fetching announcements:", error);
-      return {
-        success: false,
-        error: "Failed to fetch announcements",
-      };
-    }
-  })
-
-  // Create announcement
-  .post("/announcements", async ({ request, body }: { request: Request; body: any }) => {
-    const authResult = await requireAdmin(request);
-    if (!authResult.success) {
-      return {
-        success: false,
-        error: authResult.error,
-      };
-    }
-
-    try {
-      const { title } = body;
-
-      if (!title || !title.trim()) {
+  // Get all announcements for a course
+  .get(
+    "/announcements/course/:randomizedCourseId",
+    async ({ request, params: { randomizedCourseId } }) => {
+      const authResult = await requireAdmin(request);
+      if (!authResult.success) {
         return {
           success: false,
-          error: "Title is required",
+          error: authResult.error,
         };
       }
 
-      const newAnnouncement = await db.announcement.create({
-        data: {
-          title: title.trim(),
-          content: "",
-        },
-      });
+      try {
+        const announcements = await db.announcement.findMany({
+          where: {
+            course: {
+              randomId: randomizedCourseId,
+            },
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        });
 
-      return {
-        success: true,
-        announcement: newAnnouncement,
-      };
-    } catch (error) {
-      console.error("Error creating announcement:", error);
-      return {
-        success: false,
-        error: "Failed to create announcement",
-      };
-    }
-  })
-
-  // Get single announcement
-  .get("/announcements/:id", async ({ request, params }: { request: Request; params: { id: string } }) => {
-    const authResult = await requireAdmin(request);
-    if (!authResult.success) {
-      return {
-        success: false,
-        error: authResult.error,
-      };
-    }
-
-    try {
-      const announcement = await db.announcement.findUnique({
-        where: { id: params.id },
-      });
-
-      if (!announcement) {
+        return {
+          success: true,
+          announcements,
+        };
+      } catch (error) {
+        console.error("Error fetching announcements:", error);
         return {
           success: false,
-          error: "Announcement not found",
+          error: "Failed to fetch announcements",
+        };
+      }
+    }
+  )
+
+    // Create announcement for a course
+  .post(
+    "/announcements/course/:randomizedCourseId",
+    async ({ request, body, params: { randomizedCourseId } }) => {
+      const authResult = await requireAdmin(request);
+      if (!authResult.success) {
+        return {
+          success: false,
+          error: authResult.error,
         };
       }
 
-      return {
-        success: true,
-        announcement,
-      };
-    } catch (error) {
-      console.error("Error fetching announcement:", error);
-      return {
-        success: false,
-        error: "Failed to fetch announcement",
-      };
+      try {
+        const { title } = body as { title: string };
+
+        if (!title || !title.trim()) {
+          return {
+            success: false,
+            error: "Title is required",
+          };
+        }
+
+        // Find the course by randomId
+        const course = await db.course.findUnique({
+          where: { randomId: randomizedCourseId },
+          select: { id: true },
+        });
+
+        if (!course) {
+          return {
+            success: false,
+            error: "Course not found",
+          };
+        }
+
+        const newAnnouncement = await db.announcement.create({
+          data: {
+            title: title.trim(),
+            content: "",
+            courseId: course.id,
+          },
+        });
+
+        return {
+          success: true,
+          announcement: newAnnouncement,
+        };
+      } catch (error) {
+        console.error("Error creating announcement:", error);
+        return {
+          success: false,
+          error: "Failed to create announcement",
+        };
+      }
     }
-  })
+  )
+
+    // Get single announcement
+  .get(
+    "/announcements/:id",
+    async ({
+      request,
+      params,
+    }: {
+      request: Request;
+      params: { id: string };
+    }) => {
+      const authResult = await requireAdmin(request);
+      if (!authResult.success) {
+        return {
+          success: false,
+          error: authResult.error,
+        };
+      }
+
+      try {
+        const announcement = await db.announcement.findUnique({
+          where: { id: params.id },
+          include: {
+            course: {
+              select: {
+                id: true,
+                name: true,
+                randomId: true,
+              },
+            },
+          },
+        });
+
+        if (!announcement) {
+          return {
+            success: false,
+            error: "Announcement not found",
+          };
+        }
+
+        return {
+          success: true,
+          announcement,
+        };
+      } catch (error) {
+        console.error("Error fetching announcement:", error);
+        return {
+          success: false,
+          error: "Failed to fetch announcement",
+        };
+      }
+    }
+  )
 
   // Update announcement
   .put(
     "/announcements/:id",
-    async ({ request, params, body }: { request: Request; params: { id: string }; body: any }) => {
+    async ({
+      request,
+      params,
+      body,
+    }: {
+      request: Request;
+      params: { id: string };
+      body: any;
+    }) => {
       const authResult = await requireAdmin(request);
       if (!authResult.success) {
         return {
@@ -183,13 +233,19 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
           error: "Failed to update announcement",
         };
       }
-    },
+    }
   )
 
   // Delete announcement
   .delete(
     "/announcements/:id",
-    async ({ request, params }: { request: Request; params: { id: string } }) => {
+    async ({
+      request,
+      params,
+    }: {
+      request: Request;
+      params: { id: string };
+    }) => {
       const authResult = await requireAdmin(request);
       if (!authResult.success) {
         return {
@@ -214,7 +270,7 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
           error: "Failed to delete announcement",
         };
       }
-    },
+    }
   )
 
   // Get all users (better-auth users)
@@ -257,53 +313,70 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
   })
 
   // Get specific user by ID (better-auth user)
-  .get("/users/:id", async ({ request, params }: { request: Request; params: { id: string } }) => {
-    const authResult = await requireAdmin(request);
-    if (!authResult.success) {
-      return {
-        success: false,
-        error: authResult.error,
-      };
-    }
-
-    try {
-      const user = await db.user.findUnique({
-        where: { id: params.id },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          emailVerified: true,
-          image: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      });
-
-      if (!user) {
+  .get(
+    "/users/:id",
+    async ({
+      request,
+      params,
+    }: {
+      request: Request;
+      params: { id: string };
+    }) => {
+      const authResult = await requireAdmin(request);
+      if (!authResult.success) {
         return {
           success: false,
-          error: "User not found",
+          error: authResult.error,
         };
       }
 
-      return {
-        success: true,
-        user,
-      };
-    } catch (error) {
-      console.error("Error fetching user:", error);
-      return {
-        success: false,
-        error: "Failed to fetch user",
-      };
+      try {
+        const user = await db.user.findUnique({
+          where: { id: params.id },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            emailVerified: true,
+            image: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        });
+
+        if (!user) {
+          return {
+            success: false,
+            error: "User not found",
+          };
+        }
+
+        return {
+          success: true,
+          user,
+        };
+      } catch (error) {
+        console.error("Error fetching user:", error);
+        return {
+          success: false,
+          error: "Failed to fetch user",
+        };
+      }
     }
-  })
+  )
 
   // Update user information (better-auth user)
   .put(
     "/users/:id",
-    async ({ request, params, body }: { request: Request; params: { id: string }; body: any }) => {
+    async ({
+      request,
+      params,
+      body,
+    }: {
+      request: Request;
+      params: { id: string };
+      body: any;
+    }) => {
       const authResult = await requireAdmin(request);
       if (!authResult.success) {
         return {
@@ -372,7 +445,7 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
           error: "Failed to update user",
         };
       }
-    },
+    }
   )
 
   // Get all courses with admin access
@@ -437,7 +510,15 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
   // Update course details
   .put(
     "/courses/:id",
-    async ({ request, params, body }: { request: Request; params: { id: string }; body: any }) => {
+    async ({
+      request,
+      params,
+      body,
+    }: {
+      request: Request;
+      params: { id: string };
+      body: any;
+    }) => {
       const authResult = await requireAdmin(request);
       if (!authResult.success) {
         return {
@@ -471,5 +552,5 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
           error: "Failed to update course",
         };
       }
-    },
+    }
   );

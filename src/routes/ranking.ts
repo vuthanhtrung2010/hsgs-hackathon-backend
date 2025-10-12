@@ -62,6 +62,36 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" }).get(
 
       const courseName = realCourse.name || `Course ${realCourse.id}`;
 
+      // Get last 5 recent submissions for the course
+      const recentSubmissions = await db.quiz.findMany({
+        where: {
+          question: {
+            courseId: realCourse.id,
+          },
+        },
+        select: {
+          id: true,
+          submittedAt: true,
+          user: {
+            select: {
+              studentId: true,
+              name: true,
+              shortName: true,
+            },
+          },
+          question: {
+            select: {
+              quizName: true,
+              lesson: true,
+            },
+          },
+        },
+        orderBy: {
+          submittedAt: "desc",
+        },
+        take: 5,
+      });
+
       // Calculate max quizzes completed by any user
       const maxQuizzesCompleted = Math.max(
         ...users.map((u) => u.quizzes.length),
@@ -119,7 +149,17 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" }).get(
         })
         .sort((a, b) => b.course.rating - a.course.rating);
 
-      return ranking;
+      return {
+        ranking,
+        recentSubmissions: recentSubmissions.map((submission) => ({
+          id: submission.id,
+          submittedAt: submission.submittedAt,
+          userName: submission.user.name,
+          userShortName: submission.user.shortName,
+          userId: parseInt(submission.user.studentId),
+          quizName: submission.question.lesson || submission.question.quizName,
+        })),
+      };
     } catch (error) {
       console.error(
         `Error getting ranking for course ${randomizedCourseId}:`,

@@ -2,9 +2,8 @@ import { Elysia } from "elysia";
 import { db } from "../db.js";
 
 export const announcementRoutes = new Elysia({ prefix: "/api" })
-
-  // Get all announcements (public route)
-  .get("/announcements", async ({ query }: { query: any }) => {
+  // Get announcements by course (public route)
+  .get("/announcements/course/:randomizedCourseId", async ({ params: { randomizedCourseId }, query }) => {
     try {
       const sortBy = query.sortBy || "createdAt";
       const order = query.order || "desc";
@@ -31,6 +30,11 @@ export const announcementRoutes = new Elysia({ prefix: "/api" })
       }
 
       const announcements = await db.announcement.findMany({
+        where: {
+          course: {
+            randomId: randomizedCourseId,
+          }
+        },
         orderBy: {
           [sortBy]: order as "asc" | "desc",
         },
@@ -46,12 +50,12 @@ export const announcementRoutes = new Elysia({ prefix: "/api" })
     }
   })
 
-  // Get single announcement (public route)
-  .get("/announcements/:id", async ({ params }: { params: { id: string } }) => {
+  // Get single announcement by ID (public route)
+  .get("/announcements/:id", async ({ params: { id } }) => {
     try {
       const announcement = await db.announcement.findUnique({
         where: {
-          id: params.id,
+          id
         },
       });
 
