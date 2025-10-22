@@ -6,7 +6,7 @@ import { syncRoutes } from "./src/routes/sync.js";
 import { healthRoutes } from "./src/routes/health.js";
 import { courseRoutes } from "./src/routes/courses.js";
 import { problemRoutes } from "./src/routes/problems.js";
-import { adminRoutes } from "./src/routes/admin.js";
+import { adminApp } from "./src/adminApp.js";
 import { announcementRoutes } from "./src/routes/announcements.js";
 import { startCronJobs, stopCronJobs } from "./src/services/cron.js";
 import { auth } from "./src/auth.js";
@@ -42,7 +42,7 @@ const app = new Elysia()
   .use(rankingRoutes)
   .use(syncRoutes)
   .use(announcementRoutes)
-  .use(adminRoutes)
+  .use(adminApp)
 
   // Root endpoint
   .get("/", () => ({

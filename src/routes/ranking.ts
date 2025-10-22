@@ -7,14 +7,9 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" }).get(
     try {
       const realCourse = await db.course.findUnique({
         where: { randomId: randomizedCourseId },
-        select: { 
-          id: true, 
-          name: true, 
-          quote: true, 
-          quoteAuthor: true,
-          assignmentCount: true,
-          showDebt: true,
-        },
+        include: {
+          ratingThresholds: true
+        }
       });
 
       if (!realCourse) {
@@ -144,6 +139,8 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" }).get(
               quoteAuthor: realCourse.quoteAuthor,
               showDebt: realCourse.showDebt,
               assignmentCount: realCourse.assignmentCount,
+              customRatingThresholds: realCourse.customRatingThresholds || false,
+              ratingThresholds: realCourse.customRatingThresholds ? realCourse.ratingThresholds : null,
             },
           };
         })

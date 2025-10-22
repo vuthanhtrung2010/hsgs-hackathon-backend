@@ -70,18 +70,38 @@ model Quiz {
 }
 
 model Course {
-  randomId        String         @unique @default(cuid())
-  id              String         @id
-  name            String
-  quote           String?        @default("Thi đua là yêu nước, yêu nước phải thi đua")
-  quoteAuthor     String?        @default("Bác Hồ")
-  assignmentCount Int            @default(0)
-  showDebt        Boolean        @default(false)
-  announcements   Announcement[]
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  randomId               String            @unique @default(cuid())
+  id                     String            @id
+  name                   String
+  quote                  String?           @default("Thi đua là yêu nước, yêu nước phải thi đua")
+  quoteAuthor            String?           @default("Bác Hồ")
+  assignmentCount        Int               @default(0)
+  showDebt               Boolean           @default(false)
+  customRatingThresholds Boolean           @default(false)
+  announcements          Announcement[]
+  ratingThresholds       RatingThresholds?
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
 
   @@map("courses")
+}
+
+model RatingThresholds {
+  id                       Int      @id @default(autoincrement())
+  courseId                 String   @unique
+  course                   Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  newbieThreshold          Int      @default(0)
+  amateurThreshold         Int      @default(1000)
+  expertThreshold          Int      @default(1300)
+  candidateMasterThreshold Int      @default(1600)
+  masterThreshold          Int      @default(1900)
+  grandmasterThreshold     Int      @default(2100)
+  targetThreshold          Int      @default(2400)
+  adminThreshold           Int      @default(3000)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@map("rating_thresholds")
 }
 
 model Announcement {
