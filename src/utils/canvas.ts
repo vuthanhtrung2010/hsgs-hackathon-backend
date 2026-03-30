@@ -305,6 +305,12 @@ export async function fetchUserAvatar(userId: string): Promise<string> {
 export async function countAssignments(courseId: string): Promise<number> {
   let page = 1;
   let totalAssignments = 0;
+  const onlyCountTag26 = courseId === "2685";
+
+  // Matches assignment titles like "[26] Something here" (with optional spaces)
+  const hasTag26Prefix = (assignmentName: string): boolean => {
+    return /^\[\s*26\s*\]/.test(assignmentName);
+  };
 
   while (true) {
     const url = new URL(
@@ -318,7 +324,13 @@ export async function countAssignments(courseId: string): Promise<number> {
     if (!response.ok) throw new Error(`Failed to fetch assignments: ${response.statusText}`);
 
     const assignments = (await response.json()) as any[];
-    totalAssignments += assignments.filter(a => a.workflow_state === "published").length;
+    totalAssignments += assignments.filter((a) => {
+      if (a.workflow_state !== "published") return false;
+      if (!onlyCountTag26) return true;
+
+      const assignmentName = typeof a.name === "string" ? a.name : "";
+      return hasTag26Prefix(assignmentName);
+    }).length;
 
     const linkHeader = response.headers.get("link");
     if (!linkHeader || !linkHeader.includes('rel="next"')) break;
