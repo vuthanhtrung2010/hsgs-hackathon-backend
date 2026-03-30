@@ -35,10 +35,13 @@ type ExistingSubmissionRow = {
 // Cache to avoid multiple API calls for the same user
 const userProfileCache = new Map<string, any>();
 
+type TopicRatingClient = Pick<typeof db, "topicRating">;
+
 /**
  * Helper function to update topic ratings for a user based on quiz submission
  */
 async function updateTopicRatings(
+  client: TopicRatingClient,
   userId: number, 
   studentId: string,
   courseId: string,
@@ -57,7 +60,7 @@ async function updateTopicRatings(
     // Update each topic rating
     await Promise.all(
       topics.map(async (topic) => {
-        await db.topicRating.upsert({
+        await client.topicRating.upsert({
           where: {
             topic_userId_courseId: {
               topic,
@@ -524,7 +527,7 @@ async function processBulkSubmissions(
       const batchResult = await db.$transaction(
         async (tx: typeof db) => {
           const quizRecords = [];
-          const userUpdates = [];
+          const userUpdates = new Map<number, number>();
           let batchRatingChange = 0;
           let batchValidSubmissions = 0;
 
@@ -569,6 +572,7 @@ async function processBulkSubmissions(
             
             // Update topic ratings directly for each quiz topic
             await updateTopicRatings(
+              tx,
               user.id,
               studentId,
               courseId,
@@ -586,10 +590,7 @@ async function processBulkSubmissions(
               ratingChange,
             });
 
-            userUpdates.push({
-              id: user.id,
-              newRating: newUserRating,
-            });
+            userUpdates.set(user.id, newUserRating);
 
             batchRatingChange += newQuestionRating - question.rating;
             batchValidSubmissions++;
@@ -605,6 +606,10 @@ async function processBulkSubmissions(
           // Bulk operations within micro-transaction
           // Note: We're still updating user ratings for backward compatibility,
           // but the primary rating system is now topic-based
+          const orderedUserUpdates = Array.from(userUpdates.entries())
+            .sort(([aId], [bId]) => aId - bId)
+            .map(([id, newRating]) => ({ id, newRating }));
+
           await Promise.all([
             // Create quiz records
             tx.quiz.createMany({
@@ -612,7 +617,7 @@ async function processBulkSubmissions(
             }),
 
             // Update user ratings using batch update
-            ...userUpdates.map((update) =>
+            ...orderedUserUpdates.map((update) =>
               tx.canvasUser.update({
                 where: { id: update.id },
                 data: { rating: update.newRating, updatedAt: new Date() },
@@ -758,55 +763,53 @@ export async function syncCourseSubmissions(courseId: string): Promise<void> {
       );
       const batchStartTime = Date.now();
 
-      await Promise.all(
-        quizBatch.map(async (quiz) => {
-          const parsedQuiz = parseQuiz(quiz.title);
-          if (!parsedQuiz) {
-            console.log(`⏭️  Skipping quiz "${quiz.title}" - no cluster found`);
-            return;
-          }
+      for (const quiz of quizBatch) {
+        const parsedQuiz = parseQuiz(quiz.title);
+        if (!parsedQuiz) {
+          console.log(`⏭️  Skipping quiz "${quiz.title}" - no cluster found`);
+          continue;
+        }
 
-          console.log(
-            `🔍 Processing quiz: ${quiz.title} (Types: [${parsedQuiz.types.join(", ")}])`,
-          );
+        console.log(
+          `🔍 Processing quiz: ${quiz.title} (Types: [${parsedQuiz.types.join(", ")}])`,
+        );
 
-          // Fetch updated submissions since last sync
-          const submissions = await fetchAllUpdatedSubmissions(
+        // Fetch updated submissions since last sync
+        const submissions = await fetchAllUpdatedSubmissions(
+          courseId,
+          quiz.id.toString(),
+          lastSync,
+        );
+
+        if (!submissions.length) {
+          console.log(`⏭️  No submissions found for quiz ${quiz.id}`);
+          continue;
+        }
+
+        console.log(
+          `📝 Found ${submissions.length} submissions for quiz ${quiz.id}`,
+        );
+
+        // Filter out existing submissions
+        const newSubmissions = submissions.filter((submission) => {
+          const key = `${submission.user_id}-${quiz.id}`;
+          return !existingSubmissionKeys.has(key);
+        });
+
+        console.log(
+          `Processing ${newSubmissions.length} new submissions (${submissions.length - newSubmissions.length} skipped as duplicates)`,
+        );
+
+        if (newSubmissions.length > 0) {
+          // Process submissions in smaller batches
+          await processBulkSubmissions(
+            newSubmissions,
+            quiz,
+            parsedQuiz,
             courseId,
-            quiz.id.toString(),
-            lastSync,
           );
-
-          if (!submissions.length) {
-            console.log(`⏭️  No submissions found for quiz ${quiz.id}`);
-            return;
-          }
-
-          console.log(
-            `📝 Found ${submissions.length} submissions for quiz ${quiz.id}`,
-          );
-
-          // Filter out existing submissions
-          const newSubmissions = submissions.filter((submission) => {
-            const key = `${submission.user_id}-${quiz.id}`;
-            return !existingSubmissionKeys.has(key);
-          });
-
-          console.log(
-            `Processing ${newSubmissions.length} new submissions (${submissions.length - newSubmissions.length} skipped as duplicates)`,
-          );
-
-          if (newSubmissions.length > 0) {
-            // Process submissions in smaller batches
-            await processBulkSubmissions(
-              newSubmissions,
-              quiz,
-              parsedQuiz,
-              courseId,
-            );
-          }
-        }),
-      );
+        }
+      }
 
       const batchDuration = Date.now() - batchStartTime;
       console.log(
