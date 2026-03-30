@@ -15,6 +15,23 @@ import type { CanvasSubmission } from "../types.js";
 
 const CONCURRENCY_LIMIT = 5; // Maximum concurrent operations
 
+function shouldSyncQuizForCourse(courseId: string, quizTitle: string): boolean {
+  if (courseId !== "2685") return true;
+  return /\[\s*26\s*\]/.test(quizTitle);
+}
+
+type SyncUserRow = {
+  id: number;
+  studentId: string;
+  rating: number;
+  problemsSolved: number | bigint;
+};
+
+type ExistingSubmissionRow = {
+  studentId: string;
+  quizId: string;
+};
+
 // Cache to avoid multiple API calls for the same user
 const userProfileCache = new Map<string, any>();
 
@@ -452,8 +469,8 @@ async function processBulkSubmissions(
   const quizId = quiz.id.toString();
 
   // Get users and question data in parallel
-  const [users, question] = await Promise.all([
-    db.$queryRawUnsafe<{ id: number; studentId: string; rating: number; problemsSolved: bigint }[]>(
+  const [usersResult, question] = await Promise.all([
+    db.$queryRawUnsafe<SyncUserRow[]>(
       `
       SELECT u.id, u."studentId", u.rating, COUNT(qz.id) as "problemsSolved"
       FROM "users" u
@@ -469,6 +486,8 @@ async function processBulkSubmissions(
     }),
   ]);
 
+  const users: SyncUserRow[] = usersResult;
+
   if (!question) {
     console.error(
       `Question not found for quiz ${quizId} in course ${courseId}`,
@@ -476,7 +495,9 @@ async function processBulkSubmissions(
     return;
   }
 
-  const userMap = new Map(users.map((u) => [u.studentId, u]));
+  const userMap = new Map<string, SyncUserRow>(
+    users.map((u: SyncUserRow) => [u.studentId, u]),
+  );
 
   // Process submissions in MICRO-BATCHES using smaller transactions to avoid deadlocks
   const MICRO_BATCH_SIZE = 10; // Much smaller batches for faster transactions
@@ -501,7 +522,7 @@ async function processBulkSubmissions(
 
     try {
       const batchResult = await db.$transaction(
-        async (tx) => {
+        async (tx: typeof db) => {
           const quizRecords = [];
           const userUpdates = [];
           let batchRatingChange = 0;
@@ -645,22 +666,6 @@ async function processBulkSubmissions(
     }
   }
 }
-async function processWithConcurrency<T, R>(
-  items: T[],
-  processor: (item: T) => Promise<R>,
-  concurrencyLimit: number = CONCURRENCY_LIMIT,
-): Promise<R[]> {
-  const results: R[] = [];
-
-  for (let i = 0; i < items.length; i += concurrencyLimit) {
-    const batch = items.slice(i, i + concurrencyLimit);
-    const batchResults = await Promise.all(batch.map(processor));
-    results.push(...batchResults);
-  }
-
-  return results;
-}
-
 export async function syncCourseSubmissions(courseId: string): Promise<void> {
   console.log(`Starting sync for course ${courseId}`);
 
@@ -692,8 +697,18 @@ export async function syncCourseSubmissions(courseId: string): Promise<void> {
     const now = new Date();
 
     // Fetch all quizzes for the course
-    const quizzes = await fetchAllQuizzes(courseId);
-    console.log(`Found ${quizzes.length} quizzes in course ${courseId}`);
+    const allQuizzes = await fetchAllQuizzes(courseId);
+    const quizzes = allQuizzes.filter((quiz) =>
+      shouldSyncQuizForCourse(courseId, quiz.title),
+    );
+
+    console.log(`Found ${allQuizzes.length} quizzes in course ${courseId}`);
+
+    if (courseId === "2685") {
+      console.log(
+        `Filtered to ${quizzes.length} quizzes with [26] tag for course 2685`,
+      );
+    }
 
     if (quizzes.length === 0) {
       console.log(`No quizzes found for course ${courseId}`);
@@ -705,7 +720,7 @@ export async function syncCourseSubmissions(courseId: string): Promise<void> {
 
     // Get all existing submissions for this course in one query
     const existingSubmissions = await db.$queryRawUnsafe<
-      { studentId: string; quizId: string }[]
+      ExistingSubmissionRow[]
     >(
       `
       SELECT DISTINCT u."studentId", q."quizId"
@@ -717,8 +732,10 @@ export async function syncCourseSubmissions(courseId: string): Promise<void> {
       courseId,
     );
 
-    const existingSubmissionKeys = new Set(
-      existingSubmissions.map((sub) => `${sub.studentId}-${sub.quizId}`),
+    const existingSubmissionKeys = new Set<string>(
+      existingSubmissions.map(
+        (sub: ExistingSubmissionRow) => `${sub.studentId}-${sub.quizId}`,
+      ),
     );
 
     console.log(

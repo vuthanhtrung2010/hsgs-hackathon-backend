@@ -307,9 +307,10 @@ export async function countAssignments(courseId: string): Promise<number> {
   let totalAssignments = 0;
   const onlyCountTag26 = courseId === "2685";
 
-  // Matches assignment titles like "[26] Something here" (with optional spaces)
+  // Matches assignment titles containing tag [26] with optional spaces.
   const hasTag26Prefix = (assignmentName: string): boolean => {
-    return /^\[\s*26\s*\]/.test(assignmentName);
+    const normalized = assignmentName.trim();
+    return /\[\s*26\s*\]/.test(normalized);
   };
 
   while (true) {
@@ -324,13 +325,24 @@ export async function countAssignments(courseId: string): Promise<number> {
     if (!response.ok) throw new Error(`Failed to fetch assignments: ${response.statusText}`);
 
     const assignments = (await response.json()) as any[];
-    totalAssignments += assignments.filter((a) => {
-      if (a.workflow_state !== "published") return false;
+    const publishedAssignments = assignments.filter(
+      (a) => a.workflow_state === "published",
+    );
+
+    const countedAssignments = publishedAssignments.filter((a) => {
       if (!onlyCountTag26) return true;
 
       const assignmentName = typeof a.name === "string" ? a.name : "";
       return hasTag26Prefix(assignmentName);
-    }).length;
+    });
+
+    if (onlyCountTag26) {
+      console.log(
+        `[countAssignments] course=2685 page=${page} published=${publishedAssignments.length} countedTag26=${countedAssignments.length}`,
+      );
+    }
+
+    totalAssignments += countedAssignments.length;
 
     const linkHeader = response.headers.get("link");
     if (!linkHeader || !linkHeader.includes('rel="next"')) break;
