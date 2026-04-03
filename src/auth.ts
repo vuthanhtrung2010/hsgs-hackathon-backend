@@ -10,6 +10,9 @@ export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "postgresql", // Using PostgreSQL as defined in schema
   }),
+  advanced: {
+    disableOriginCheck: true, // Disable origin check for development (enable in production)
+  },
   emailAndPassword: {
     enabled: true,
   },

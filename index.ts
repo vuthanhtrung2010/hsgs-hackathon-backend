@@ -16,16 +16,7 @@ const app = new Elysia()
   // CORS middleware
   .use(
     cors({
-      origin:
-        env.NODE_ENV === "production"
-          ? "https://ntdv.trunghsgs.edu.vn"
-           : [
-               "http://localhost:5173",
-               "http://10.0.0.187:45263",
-               "http://localhost:45263",
-               "https://ntdv.trunghsgs.edu.vn",
-               "http://10.0.0.187:5173",
-             ],
+      origin: true,
       methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
       credentials: true,
       allowedHeaders: ["Content-Type", "Authorization"],
