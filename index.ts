@@ -18,8 +18,14 @@ const app = new Elysia()
     cors({
       origin:
         env.NODE_ENV === "production"
-          ? "https://your-frontend-domain.com"
-          : "http://localhost:5173",
+          ? "https://ntdv.trunghsgs.edu.vn"
+           : [
+               "http://localhost:5173",
+               "http://10.0.0.187:45263",
+               "http://localhost:45263",
+               "https://ntdv.trunghsgs.edu.vn",
+               "http://10.0.0.187:5173",
+             ],
       methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
       credentials: true,
       allowedHeaders: ["Content-Type", "Authorization"],
