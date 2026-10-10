@@ -36,3 +36,23 @@ test("db client is initialized with bun:sql", () => {
   expect(db.query.courses).toBeDefined();
   expect(db.query.users).toBeDefined();
 });
+
+test("courses.randomId uses CUID defaultFn", async () => {
+  const { isCuid } = await import("@paralleldrive/cuid2");
+  expect(schema.courses.randomId.defaultFn).toBeDefined();
+  const generated = schema.courses.randomId.defaultFn!();
+  expect(typeof generated).toBe("string");
+  if (typeof generated === "string") {
+    expect(isCuid(generated)).toBe(true);
+  }
+});
+
+test("announcements.id uses CUID defaultFn", async () => {
+  const { isCuid } = await import("@paralleldrive/cuid2");
+  expect(schema.announcements.id.defaultFn).toBeDefined();
+  const generated = schema.announcements.id.defaultFn!();
+  expect(typeof generated).toBe("string");
+  if (typeof generated === "string") {
+    expect(isCuid(generated)).toBe(true);
+  }
+});

@@ -8,6 +8,13 @@
       "when": 1791615748944,
       "tag": "0000_new_red_hulk",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791619153033,
+      "tag": "0001_charming_rick_jones",
+      "breakpoints": true
     }
   ]
 }

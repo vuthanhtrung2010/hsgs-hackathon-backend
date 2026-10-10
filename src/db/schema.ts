@@ -10,6 +10,7 @@ import {
   index,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
+import { createId } from "@paralleldrive/cuid2";
 
 // ==========================================
 // Canvas / LMS Domain Tables
@@ -101,7 +102,7 @@ export const courses = pgTable(
     randomId: text("randomId")
       .notNull()
       .unique()
-      .default(sql`gen_random_uuid()::text`),
+      .$defaultFn(() => createId()),
     name: text("name").notNull(),
     quote: text("quote").default("Thi đua là yêu nước, yêu nước phải thi đua"),
     quoteAuthor: text("quoteAuthor").default("Bác Hồ"),
@@ -153,7 +154,7 @@ export const announcements = pgTable(
   {
     id: text("id")
       .primaryKey()
-      .default(sql`gen_random_uuid()::text`),
+      .$defaultFn(() => createId()),
     title: text("title").notNull(),
     courseId: text("courseId")
       .notNull()
