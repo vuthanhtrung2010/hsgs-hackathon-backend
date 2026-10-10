@@ -1,6 +1,9 @@
 import { Elysia } from "elysia";
 import { syncCourseSubmissions, syncAllCourses } from "../services/sync.js";
 import { env } from "../env.js";
+import { db } from "../db/index.js";
+import * as schema from "../db/schema.js";
+import { eq } from "drizzle-orm";
 
 export const syncRoutes = new Elysia({ prefix: "/api/sync" })
   .post("/", async ({ body }: { body: any }) => {
@@ -45,11 +48,9 @@ export const syncRoutes = new Elysia({ prefix: "/api/sync" })
 
   .get("/status/:courseId", async ({ params: { courseId } }) => {
     try {
-      const syncHistory = await import("../db.js").then((m) =>
-        m.db.syncHistory.findUnique({
-          where: { courseId },
-        }),
-      );
+      const syncHistory = await db.query.syncHistory.findFirst({
+        where: eq(schema.syncHistory.courseId, courseId),
+      });
 
       if (!syncHistory) {
         return {

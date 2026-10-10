@@ -251,7 +251,7 @@ async function bulkUpsertQuestions(
         courseId,
         types: parsedQuiz.types,
         lesson: parsedQuiz.lesson || null,
-        difficulty: parsedQuiz.difficulty ? parseFloat(parsedQuiz.difficulty) : null,
+        difficulty: parsedQuiz.difficulty != null ? Number(parsedQuiz.difficulty) : null,
         class: parsedQuiz.class || null,
       };
     })
