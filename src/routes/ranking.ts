@@ -1,15 +1,17 @@
 import { Elysia } from "elysia";
-import { db } from "../db.js";
+import { db } from "../db/index.js";
+import * as schema from "../db/schema.js";
+import { eq, desc } from "drizzle-orm";
 
 export const rankingRoutes = new Elysia({ prefix: "/api/ranking" }).get(
   "/:randomizedCourseId",
   async ({ params: { randomizedCourseId }, set }) => {
     try {
-      const realCourse = await db.course.findUnique({
-        where: { randomId: randomizedCourseId },
-        include: {
-          ratingThresholds: true
-        }
+      const realCourse = await db.query.courses.findFirst({
+        where: eq(schema.courses.randomId, randomizedCourseId),
+        with: {
+          ratingThresholds: true,
+        },
       });
 
       if (!realCourse) {
@@ -20,32 +22,16 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" }).get(
         };
       }
 
-      // Get all users for the specified course
-      const users = await db.canvasUser.findMany({
-        where: { courseId: realCourse.id },
-        select: {
-          id: true,
-          studentId: true,
-          name: true,
-          shortName: true,
+      // Get all users for the specified course with their topic ratings and completed quizzes
+      const users = await db.query.users.findMany({
+        where: eq(schema.users.courseId, realCourse.id),
+        with: {
           topicRatings: {
-            where: {
-              courseId: realCourse.id,
-            },
-            select: {
-              rating: true,
-              submissionCount: true,
-              topic: true,
-            },
+            where: eq(schema.topicRatings.courseId, realCourse.id),
           },
           quizzes: {
-            select: {
-              id: true,
-            },
-            where: {
-              question: {
-                courseId: realCourse.id,
-              },
+            with: {
+              question: true,
             },
           },
         },
@@ -58,49 +44,48 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" }).get(
       const courseName = realCourse.name || `Course ${realCourse.id}`;
 
       // Get last 5 recent submissions for the course
-      const recentSubmissions = await db.quiz.findMany({
-        where: {
-          question: {
-            courseId: realCourse.id,
-          },
-        },
-        select: {
-          id: true,
-          submittedAt: true,
-          user: {
-            select: {
-              studentId: true,
-              name: true,
-              shortName: true,
-            },
-          },
-          question: {
-            select: {
-              quizName: true,
-              lesson: true,
-            },
-          },
-        },
-        orderBy: {
-          submittedAt: "desc",
-        },
-        take: 5,
-      });
+      const recentSubmissions = await db
+        .select({
+          id: schema.quizzes.id,
+          submittedAt: schema.quizzes.submittedAt,
+          studentId: schema.users.studentId,
+          userName: schema.users.name,
+          userShortName: schema.users.shortName,
+          quizName: schema.questions.quizName,
+          lesson: schema.questions.lesson,
+        })
+        .from(schema.quizzes)
+        .innerJoin(schema.users, eq(schema.quizzes.userId, schema.users.id))
+        .innerJoin(
+          schema.questions,
+          eq(schema.quizzes.questionId, schema.questions.id),
+        )
+        .where(eq(schema.questions.courseId, realCourse.id))
+        .orderBy(desc(schema.quizzes.submittedAt))
+        .limit(5);
+
+      // Filter quizzes per user to only those belonging to this course
+      const usersWithCourseQuizzes = users.map((u) => ({
+        ...u,
+        courseQuizzes: u.quizzes.filter(
+          (q) => q.question.courseId === realCourse.id,
+        ),
+      }));
 
       // Calculate max quizzes completed by any user
       const maxQuizzesCompleted = Math.max(
-        ...users.map((u) => u.quizzes.length),
-        0
+        ...usersWithCourseQuizzes.map((u) => u.courseQuizzes.length),
+        0,
       );
 
       // Check if debt calculation is valid
-      const isDebtValid = 
-        realCourse.showDebt && 
-        realCourse.assignmentCount > 0 && 
+      const isDebtValid =
+        realCourse.showDebt &&
+        realCourse.assignmentCount > 0 &&
         maxQuizzesCompleted <= realCourse.assignmentCount;
 
       // Calculate average rating as weighted average of topic ratings for each user
-      const ranking = users
+      const ranking = usersWithCourseQuizzes
         .map((user) => {
           let averageRating = 1500; // Default rating
 
@@ -120,8 +105,8 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" }).get(
             }
           }
 
-          const quizzesCompleted = user.quizzes.length;
-          const debt = isDebtValid 
+          const quizzesCompleted = user.courseQuizzes.length;
+          const debt = isDebtValid
             ? Math.max(0, realCourse.assignmentCount - quizzesCompleted)
             : 0;
 
@@ -140,7 +125,9 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" }).get(
               showDebt: realCourse.showDebt,
               assignmentCount: realCourse.assignmentCount,
               customRatingThresholds: realCourse.customRatingThresholds || false,
-              ratingThresholds: realCourse.customRatingThresholds ? realCourse.ratingThresholds : null,
+              ratingThresholds: realCourse.customRatingThresholds
+                ? realCourse.ratingThresholds
+                : null,
             },
           };
         })
@@ -151,19 +138,19 @@ export const rankingRoutes = new Elysia({ prefix: "/api/ranking" }).get(
         recentSubmissions: recentSubmissions.map((submission) => ({
           id: submission.id,
           submittedAt: submission.submittedAt,
-          userName: submission.user.name,
-          userShortName: submission.user.shortName,
-          userId: parseInt(submission.user.studentId),
-          quizName: submission.question.lesson || submission.question.quizName,
+          userName: submission.userName,
+          userShortName: submission.userShortName,
+          userId: parseInt(submission.studentId),
+          quizName: submission.lesson || submission.quizName,
         })),
       };
     } catch (error) {
       console.error(
         `Error getting ranking for course ${randomizedCourseId}:`,
-        error
+        error,
       );
       set.status = 500;
       return { error: "Internal server error" };
     }
-  }
+  },
 );
