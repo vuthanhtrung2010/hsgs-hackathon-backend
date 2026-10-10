@@ -12,7 +12,7 @@ The application is the HSGS Hackathon backend, built with Bun and Elysia. Curren
 
 ### Goals
 - Completely remove Prisma dependencies (`prisma`, `@prisma/client`, `@prisma/adapter-pg`, `prisma/`, `prisma.config.ts`).
-- Migrate to 100% Drizzle ORM using the pure-JavaScript/TypeScript `postgres` driver (`porsager/postgres`).
+- Migrate to 100% Drizzle ORM using Bun's native SQL driver (`bun:sql`) via `drizzle-orm/bun-sql`.
 - Leverage Drizzle's Relational API (`db.query.*`) for querying with nested relations across all routes.
 - Replace sequential sync loops with native PostgreSQL batch upserts (`db.insert().values().onConflictDoUpdate()`).
 - Remove redundant runtime index checks (`ensureCriticalIndexes`) and session setting overrides.
@@ -26,7 +26,7 @@ The application is the HSGS Hackathon backend, built with Bun and Elysia. Curren
 - **Runtime**: Bun (>= 1.4.2)
 - **Framework**: Elysia
 - **ORM**: `drizzle-orm`
-- **Driver**: `postgres` (postgres.js) - zero binary dependencies, pure JS, fastest Postgres driver on Bun
+- **Driver**: `bun:sql` (Bun's native built-in PostgreSQL driver) - zero extra npm driver dependencies, native C/Zig performance, ideal for NixOS
 - **Migration & Tooling**: `drizzle-kit`
 - **Auth**: `better-auth` with `@better-auth/drizzle-adapter`
 - **Database**: PostgreSQL
@@ -140,14 +140,13 @@ All database tables and column names maintain 100% backward compatibility with t
 ## Database Client (`src/db/index.ts`)
 
 ```ts
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { drizzle } from "drizzle-orm/bun-sql";
+import { SQL } from "bun";
 import * as schema from "./schema.js";
 
-const connectionString = process.env.DATABASE_URL!;
-const client = postgres(connectionString);
+const client = new SQL(process.env.DATABASE_URL!);
 
-export const db = drizzle(client, { schema });
+export const db = drizzle({ client, schema });
 export { schema };
 ```
 
@@ -289,7 +288,8 @@ export const auth = betterAuth({
     "db:studio": "bun x drizzle-kit studio"
     ```
   - Removed: `@prisma/adapter-pg`, `@prisma/client`, `prisma`
-  - Added: `drizzle-orm`, `postgres`, `drizzle-kit` (devDependencies)
+  - Added: `drizzle-orm`, `drizzle-kit` (devDependencies)
+  - Driver: native `bun:sql` (built into Bun runtime)
 
 ---
 
