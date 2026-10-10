@@ -5,6 +5,10 @@ import * as schema from "./db/schema.js";
 
 export const auth = betterAuth({
   trustedOrigins: ["*"],
+  advanced: {
+    disableOriginCheck: true,
+    disableCSRFCheck: true,
+  },
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: {
