@@ -521,9 +521,12 @@ import { drizzle } from "drizzle-orm/bun-sql";
 import { SQL } from "bun";
 import * as schema from "./schema.js";
 
-const connectionString =
-  process.env.DATABASE_URL || "postgres://localhost:5432/hsgs_hackathon";
-const client = new SQL(connectionString);
+if (!process.env.DATABASE_URL) {
+  console.error("❌ Fatal Error: DATABASE_URL environment variable is not set.");
+  process.exit(1);
+}
+
+const client = new SQL(process.env.DATABASE_URL);
 
 export const db = drizzle({ client, schema });
 export { schema };
