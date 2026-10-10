@@ -24,6 +24,7 @@ const userProfileCache = new Map<string, any>();
  * Helper function to update topic ratings for a user based on quiz submission
  */
 async function updateTopicRatings(
+  tx: any,
   userId: number,
   studentId: string,
   courseId: string,
@@ -42,7 +43,7 @@ async function updateTopicRatings(
     );
 
     const now = new Date();
-    // Update each topic rating with native PostgreSQL batch upsert
+    // Update each topic rating with native PostgreSQL batch upsert within the transaction
     const topicRecords = topics.map((topic) => ({
       topic,
       userId,
@@ -53,7 +54,7 @@ async function updateTopicRatings(
       updatedAt: now,
     }));
 
-    await db
+    await tx
       .insert(schema.topicRatings)
       .values(topicRecords)
       .onConflictDoUpdate({
@@ -511,6 +512,7 @@ async function processBulkSubmissions(
           }
 
           await updateTopicRatings(
+            tx,
             user.id,
             studentId,
             courseId,
@@ -546,6 +548,9 @@ async function processBulkSubmissions(
 
         // Bulk insert quizzes
         await tx.insert(schema.quizzes).values(quizRecords).onConflictDoNothing();
+
+        // Sort user updates by ID to enforce deterministic lock ordering
+        userUpdates.sort((a, b) => a.id - b.id);
 
         // Update user ratings
         for (const update of userUpdates) {
@@ -685,12 +690,13 @@ export async function syncCourseSubmissions(courseId: string): Promise<void> {
       );
       const batchStartTime = Date.now();
 
-      await Promise.all(
+      // 1. Fetch updated submissions concurrently from Canvas API
+      const quizSubmissionsData = await Promise.all(
         quizBatch.map(async (quiz) => {
           const parsedQuiz = parseQuiz(quiz.title);
           if (!parsedQuiz) {
             console.log(`⏭️  Skipping quiz "${quiz.title}" - no cluster found`);
-            return;
+            return null;
           }
 
           console.log(
@@ -705,7 +711,7 @@ export async function syncCourseSubmissions(courseId: string): Promise<void> {
 
           if (!submissions.length) {
             console.log(`⏭️  No submissions found for quiz ${quiz.id}`);
-            return;
+            return null;
           }
 
           console.log(
@@ -721,16 +727,25 @@ export async function syncCourseSubmissions(courseId: string): Promise<void> {
             `Processing ${newSubmissions.length} new submissions (${submissions.length - newSubmissions.length} skipped as duplicates)`,
           );
 
-          if (newSubmissions.length > 0) {
-            await processBulkSubmissions(
-              newSubmissions,
-              quiz,
-              parsedQuiz,
-              courseId,
-            );
-          }
+          return {
+            quiz,
+            parsedQuiz,
+            newSubmissions,
+          };
         }),
       );
+
+      // 2. Process database writes sequentially per quiz to eliminate lock contention & deadlocks
+      for (const item of quizSubmissionsData) {
+        if (item && item.newSubmissions.length > 0) {
+          await processBulkSubmissions(
+            item.newSubmissions,
+            item.quiz,
+            item.parsedQuiz,
+            courseId,
+          );
+        }
+      }
 
       const batchDuration = Date.now() - batchStartTime;
       console.log(
