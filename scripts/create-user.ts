@@ -1,11 +1,9 @@
 #!/usr/bin/env bun
 
-import { PrismaClient } from "generated/client";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { auth } from "auth.js";
-
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
-const prisma = new PrismaClient({ adapter });
+import { db } from "../src/db/index.js";
+import * as schema from "../src/db/schema.js";
+import { eq } from "drizzle-orm";
+import { auth } from "../src/auth.js";
 
 async function createUser() {
   console.log("🔧 User Creation Script");
@@ -28,8 +26,8 @@ async function createUser() {
     console.log(`Creating user: ${name} (${email})`);
 
     // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
+    const existingUser = await db.query.user.findFirst({
+      where: eq(schema.user.email, email),
     });
 
     if (existingUser) {
@@ -61,8 +59,6 @@ async function createUser() {
   } catch (error) {
     console.error("❌ Error creating user:", error);
     process.exit(1);
-  } finally {
-    await prisma.$disconnect();
   }
 }
 

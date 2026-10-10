@@ -37,7 +37,6 @@ export async function startCronJobs(): Promise<void> {
       }
     },
     {
-      scheduled: true,
       timezone: "UTC",
     },
   );

@@ -1,6 +1,8 @@
 import { Elysia } from "elysia";
-import { db } from "../db";
-import { requireAdmin } from "../middleware/auth";
+import { db } from "../db/index.js";
+import * as schema from "../db/schema.js";
+import { eq } from "drizzle-orm";
+import { requireAdmin } from "../middleware/auth.js";
 
 export const courseSettingsRoute = new Elysia({ prefix: "/api/admin/courses" })
   // Get course settings including rating thresholds
@@ -14,15 +16,9 @@ export const courseSettingsRoute = new Elysia({ prefix: "/api/admin/courses" })
     }
 
     try {
-      const course = await db.course.findUnique({
-        where: { id: params.id },
-        select: {
-          id: true,
-          name: true,
-          quote: true,
-          quoteAuthor: true,
-          showDebt: true,
-          customRatingThresholds: true,
+      const course = await db.query.courses.findFirst({
+        where: eq(schema.courses.id, params.id),
+        with: {
           ratingThresholds: true,
         },
       });
@@ -113,37 +109,31 @@ export const courseSettingsRoute = new Elysia({ prefix: "/api/admin/courses" })
         }
       }
 
+      const updateData: Partial<typeof schema.courses.$inferInsert> = {
+        updatedAt: new Date(),
+      };
+      if (quote !== undefined) updateData.quote = quote;
+      if (quoteAuthor !== undefined) updateData.quoteAuthor = quoteAuthor;
+      if (showDebt !== undefined) updateData.showDebt = showDebt;
+      if (customRatingThresholds !== undefined) {
+        updateData.customRatingThresholds = customRatingThresholds;
+      }
+
       // Update the course
-      const updatedCourse = await db.course.update({
-        where: { id: params.id },
-        data: {
-          quote: quote !== undefined ? quote : undefined,
-          quoteAuthor: quoteAuthor !== undefined ? quoteAuthor : undefined,
-          showDebt: showDebt !== undefined ? showDebt : undefined,
-          customRatingThresholds:
-            customRatingThresholds !== undefined
-              ? customRatingThresholds
-              : undefined,
-        },
-      });
+      const updatedCourses = await db
+        .update(schema.courses)
+        .set(updateData)
+        .where(eq(schema.courses.id, params.id))
+        .returning();
+
+      const updatedCourse = updatedCourses[0];
 
       // Handle rating thresholds if using custom ones
       if (customRatingThresholds && thresholds) {
-        // Upsert (create or update) rating thresholds
-        await db.ratingThresholds.upsert({
-          where: { courseId: params.id },
-          update: {
-            newbieThreshold: thresholds.newbieThreshold,
-            amateurThreshold: thresholds.amateurThreshold,
-            expertThreshold: thresholds.expertThreshold,
-            candidateMasterThreshold: thresholds.candidateMasterThreshold,
-            masterThreshold: thresholds.masterThreshold,
-            grandmasterThreshold: thresholds.grandmasterThreshold,
-            targetThreshold: thresholds.targetThreshold,
-            adminThreshold: thresholds.adminThreshold,
-            updatedAt: new Date(),
-          },
-          create: {
+        const now = new Date();
+        await db
+          .insert(schema.ratingThresholds)
+          .values({
             courseId: params.id,
             newbieThreshold: thresholds.newbieThreshold,
             amateurThreshold: thresholds.amateurThreshold,
@@ -153,13 +143,28 @@ export const courseSettingsRoute = new Elysia({ prefix: "/api/admin/courses" })
             grandmasterThreshold: thresholds.grandmasterThreshold,
             targetThreshold: thresholds.targetThreshold,
             adminThreshold: thresholds.adminThreshold,
-          },
-        });
+            createdAt: now,
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: schema.ratingThresholds.courseId,
+            set: {
+              newbieThreshold: thresholds.newbieThreshold,
+              amateurThreshold: thresholds.amateurThreshold,
+              expertThreshold: thresholds.expertThreshold,
+              candidateMasterThreshold: thresholds.candidateMasterThreshold,
+              masterThreshold: thresholds.masterThreshold,
+              grandmasterThreshold: thresholds.grandmasterThreshold,
+              targetThreshold: thresholds.targetThreshold,
+              adminThreshold: thresholds.adminThreshold,
+              updatedAt: now,
+            },
+          });
       } else if (customRatingThresholds === false) {
         // If custom thresholds are disabled, delete any existing thresholds
-        await db.ratingThresholds.deleteMany({
-          where: { courseId: params.id },
-        });
+        await db
+          .delete(schema.ratingThresholds)
+          .where(eq(schema.ratingThresholds.courseId, params.id));
       }
 
       return {

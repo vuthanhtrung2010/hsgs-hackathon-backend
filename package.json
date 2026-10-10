@@ -6,26 +6,24 @@
   "scripts": {
     "dev": "bun run --watch index.ts",
     "start": "bun run index.ts",
-    "db:generate": "bunx prisma generate",
-    "db:push": "bun x prisma db push",
-    "db:migrate": "bun x prisma migrate dev",
-    "db:reset": "bun x prisma migrate reset --force",
-    "db:studio": "bun x prisma studio"
+    "db:generate": "bun x drizzle-kit generate",
+    "db:push": "bun x drizzle-kit push",
+    "db:migrate": "bun x drizzle-kit migrate",
+    "db:studio": "bun x drizzle-kit studio"
   },
   "dependencies": {
     "@elysiajs/cors": "^1.4.1",
-    "@prisma/adapter-pg": "^7.6.0",
-    "@prisma/client": "latest",
     "@types/node-cron": "^3.0.11",
     "better-auth": "^1.5.6",
+    "drizzle-orm": "^0.41.0",
     "elysia": "latest",
     "node-cron": "^4.2.1",
-    "prisma": "latest",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/node": "^20.19.37"
+    "@types/node": "^20.19.37",
+    "drizzle-kit": "^0.31.0"
   },
   "peerDependencies": {
     "typescript": "^5.8.3"

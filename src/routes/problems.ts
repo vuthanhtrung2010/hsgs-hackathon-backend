@@ -1,32 +1,29 @@
 import { Elysia } from "elysia";
-import { db } from "../db.js";
+import { db } from "../db/index.js";
+import * as schema from "../db/schema.js";
+import { asc, desc, inArray } from "drizzle-orm";
 import { env } from "../env.js";
 
 export const problemRoutes = new Elysia({ prefix: "/api/problems" }).get(
   "/",
   async () => {
     try {
-      // Get all questions (problems) with their course information
-      const questions = await db.question.findMany({
-        include: {
-          _count: {
-            select: {
-              quizzes: true,
-            },
-          },
-        },
-        orderBy: [{ courseId: "asc" }, { rating: "desc" }],
+      // Get all questions (problems)
+      const questions = await db.query.questions.findMany({
+        orderBy: [
+          asc(schema.questions.courseId),
+          desc(schema.questions.rating),
+        ],
       });
 
       // Get course information for all unique courseIds
       const courseIds = [...new Set(questions.map((q) => q.courseId))];
-      const courses = await db.course.findMany({
-        where: {
-          id: {
-            in: courseIds,
-          },
-        },
-      });
+      const courses =
+        courseIds.length > 0
+          ? await db.query.courses.findMany({
+              where: inArray(schema.courses.id, courseIds),
+            })
+          : [];
       const courseMap = new Map(courses.map((c) => [c.id, c]));
 
       // Transform the data to match the frontend Problem interface

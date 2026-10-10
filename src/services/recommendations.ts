@@ -1,4 +1,6 @@
-import { db } from "../db.js";
+import { db } from "../db/index.js";
+import * as schema from "../db/schema.js";
+import { eq, and, notInArray, asc } from "drizzle-orm";
 import { type Recommendations } from "../types.js";
 import { env } from "../env.js";
 
@@ -11,17 +13,15 @@ export async function getRecommendationsForUser(
   courseId: string,
   count: number = 3,
 ): Promise<Recommendations[]> {
-  // Get user's current rating in this course
-  const user = await db.canvasUser.findUnique({
-    where: {
-      studentId_courseId: {
-        studentId,
-        courseId,
-      },
-    },
-    include: {
+  // Get user's current rating in this course with solved quizzes
+  const user = await db.query.users.findFirst({
+    where: and(
+      eq(schema.users.studentId, studentId),
+      eq(schema.users.courseId, courseId),
+    ),
+    with: {
       quizzes: {
-        include: {
+        with: {
           question: true,
         },
       },
@@ -29,20 +29,19 @@ export async function getRecommendationsForUser(
   });
 
   const userRating = user?.rating || 1500;
-  const solvedQuizIds = user?.quizzes.map((q: any) => q.question.quizId) || [];
+  const solvedQuizIds =
+    user?.quizzes.map((q) => q.question.quizId) || [];
 
   // Find unsolved problems
-  const unsolvedQuestions = await db.question.findMany({
-    where: {
-      courseId,
-      quizId: {
-        notIn: solvedQuizIds,
-      },
-    },
-    orderBy: {
-      rating: "asc",
-    },
-    take: count * 3, // Get more than needed for better filtering
+  const whereConditions = [eq(schema.questions.courseId, courseId)];
+  if (solvedQuizIds.length > 0) {
+    whereConditions.push(notInArray(schema.questions.quizId, solvedQuizIds));
+  }
+
+  const unsolvedQuestions = await db.query.questions.findMany({
+    where: and(...whereConditions),
+    orderBy: [asc(schema.questions.rating)],
+    limit: count * 3, // Get more than needed for better filtering
   });
 
   if (!unsolvedQuestions.length) {
@@ -52,14 +51,14 @@ export async function getRecommendationsForUser(
   // Sort by rating proximity to user's rating + 100 (prefer slightly harder problems)
   const targetRating = userRating + 100;
   const sortedQuestions = unsolvedQuestions
-    .map((question: any) => ({
+    .map((question) => ({
       question,
       ratingDiff: Math.abs(question.rating - targetRating),
     }))
-    .sort((a: any, b: any) => a.ratingDiff - b.ratingDiff)
+    .sort((a, b) => a.ratingDiff - b.ratingDiff)
     .slice(0, count);
 
-  return sortedQuestions.map(({ question }: any) => ({
+  return sortedQuestions.map(({ question }) => ({
     quizId: question.quizId,
     quizName: question.lesson || question.quizName, // Use lesson (clean name) or fallback to quizName
     rating: Math.round(question.rating),
@@ -77,36 +76,36 @@ export async function getBalancedRecommendationsForUser(
   totalCount: number = 4,
 ): Promise<Recommendations[]> {
   // Get user's solved quiz IDs
-  const users = await db.canvasUser.findMany({
-    where: {
-      studentId,
-      courseId,
-    },
-    include: {
+  const users = await db.query.users.findMany({
+    where: and(
+      eq(schema.users.studentId, studentId),
+      eq(schema.users.courseId, courseId),
+    ),
+    with: {
       quizzes: {
-        include: {
+        with: {
           question: true,
         },
       },
     },
   });
 
-  const solvedQuizIds = users.flatMap((user: any) =>
-    user.quizzes.map((q: any) => q.question.quizId),
+  const solvedQuizIds = users.flatMap((u) =>
+    u.quizzes.map((q) => q.question.quizId),
   );
 
   // Get user's rating
-  const userRating = users.length > 0 ? users[0]!.rating : 1500;
+  const userRating = users.length > 0 && users[0] ? users[0].rating : 1500;
 
   // Find unsolved problems
-  const unsolvedQuestions = await db.question.findMany({
-    where: {
-      courseId,
-      quizId: {
-        notIn: solvedQuizIds,
-      },
-    },
-    take: totalCount * 2, // Get more for better selection
+  const whereConditions = [eq(schema.questions.courseId, courseId)];
+  if (solvedQuizIds.length > 0) {
+    whereConditions.push(notInArray(schema.questions.quizId, solvedQuizIds));
+  }
+
+  const unsolvedQuestions = await db.query.questions.findMany({
+    where: and(...whereConditions),
+    limit: totalCount * 2,
   });
 
   if (!unsolvedQuestions.length) {
@@ -116,14 +115,14 @@ export async function getBalancedRecommendationsForUser(
   // Sort by rating proximity to user's rating + 100 (prefer slightly harder problems)
   const targetRating = userRating + 100;
   const sortedQuestions = unsolvedQuestions
-    .map((question: any) => ({
+    .map((question) => ({
       question,
       ratingDiff: Math.abs(question.rating - targetRating),
     }))
-    .sort((a: any, b: any) => a.ratingDiff - b.ratingDiff)
+    .sort((a, b) => a.ratingDiff - b.ratingDiff)
     .slice(0, totalCount);
 
-  return sortedQuestions.map(({ question }: any) => ({
+  return sortedQuestions.map(({ question }) => ({
     quizId: question.quizId,
     quizName: question.lesson || question.quizName, // Use lesson (clean name) or fallback to quizName
     rating: Math.round(question.rating),

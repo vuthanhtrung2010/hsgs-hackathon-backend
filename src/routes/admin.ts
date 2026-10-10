@@ -1,5 +1,7 @@
 import { Elysia } from "elysia";
-import { db } from "../db.js";
+import { db } from "../db/index.js";
+import * as schema from "../db/schema.js";
+import { eq, desc, asc, count } from "drizzle-orm";
 import { requireAdmin } from "../middleware/auth.js";
 
 export const adminRoutes = new Elysia({ prefix: "/api/admin" })
@@ -14,16 +16,17 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
     }
 
     try {
-      const [canvasUserCount, announcementCount] = await Promise.all([
-        db.canvasUser.count(),
-        db.announcement.count(),
-      ]);
+      const [canvasUserCountResult, announcementCountResult] =
+        await Promise.all([
+          db.select({ count: count() }).from(schema.users),
+          db.select({ count: count() }).from(schema.announcements),
+        ]);
 
       return {
         success: true,
         stats: {
-          canvasUserCount,
-          announcementCount,
+          canvasUserCount: canvasUserCountResult[0]?.count ?? 0,
+          announcementCount: announcementCountResult[0]?.count ?? 0,
         },
       };
     } catch (error) {
@@ -49,15 +52,20 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
       }
 
       try {
-        const announcements = await db.announcement.findMany({
-          where: {
-            course: {
-              randomId: randomizedCourseId,
-            },
-          },
-          orderBy: {
-            createdAt: "desc",
-          },
+        const course = await db.query.courses.findFirst({
+          where: eq(schema.courses.randomId, randomizedCourseId),
+        });
+
+        if (!course) {
+          return {
+            success: true,
+            announcements: [],
+          };
+        }
+
+        const announcements = await db.query.announcements.findMany({
+          where: eq(schema.announcements.courseId, course.id),
+          orderBy: [desc(schema.announcements.createdAt)],
         });
 
         return {
@@ -71,10 +79,10 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
           error: "Failed to fetch announcements",
         };
       }
-    }
+    },
   )
 
-    // Create announcement for a course
+  // Create announcement for a course
   .post(
     "/announcements/course/:randomizedCourseId",
     async ({ request, body, params: { randomizedCourseId } }) => {
@@ -96,10 +104,8 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
           };
         }
 
-        // Find the course by randomId
-        const course = await db.course.findUnique({
-          where: { randomId: randomizedCourseId },
-          select: { id: true },
+        const course = await db.query.courses.findFirst({
+          where: eq(schema.courses.randomId, randomizedCourseId),
         });
 
         if (!course) {
@@ -109,17 +115,21 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
           };
         }
 
-        const newAnnouncement = await db.announcement.create({
-          data: {
+        const now = new Date();
+        const newAnnouncements = await db
+          .insert(schema.announcements)
+          .values({
             title: title.trim(),
             content: "",
             courseId: course.id,
-          },
-        });
+            createdAt: now,
+            updatedAt: now,
+          })
+          .returning();
 
         return {
           success: true,
-          announcement: newAnnouncement,
+          announcement: newAnnouncements[0],
         };
       } catch (error) {
         console.error("Error creating announcement:", error);
@@ -128,10 +138,10 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
           error: "Failed to create announcement",
         };
       }
-    }
+    },
   )
 
-    // Get single announcement
+  // Get single announcement
   .get(
     "/announcements/:id",
     async ({
@@ -150,16 +160,10 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
       }
 
       try {
-        const announcement = await db.announcement.findUnique({
-          where: { id: params.id },
-          include: {
-            course: {
-              select: {
-                id: true,
-                name: true,
-                randomId: true,
-              },
-            },
+        const announcement = await db.query.announcements.findFirst({
+          where: eq(schema.announcements.id, params.id),
+          with: {
+            course: true,
           },
         });
 
@@ -181,7 +185,7 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
           error: "Failed to fetch announcement",
         };
       }
-    }
+    },
   )
 
   // Update announcement
@@ -214,17 +218,19 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
           };
         }
 
-        const updatedAnnouncement = await db.announcement.update({
-          where: { id: params.id },
-          data: {
+        const updatedAnnouncements = await db
+          .update(schema.announcements)
+          .set({
             title: title.trim(),
             content: content || "",
-          },
-        });
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.announcements.id, params.id))
+          .returning();
 
         return {
           success: true,
-          announcement: updatedAnnouncement,
+          announcement: updatedAnnouncements[0],
         };
       } catch (error) {
         console.error("Error updating announcement:", error);
@@ -233,7 +239,7 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
           error: "Failed to update announcement",
         };
       }
-    }
+    },
   )
 
   // Delete announcement
@@ -255,9 +261,9 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
       }
 
       try {
-        await db.announcement.delete({
-          where: { id: params.id },
-        });
+        await db
+          .delete(schema.announcements)
+          .where(eq(schema.announcements.id, params.id));
 
         return {
           success: true,
@@ -270,7 +276,7 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
           error: "Failed to delete announcement",
         };
       }
-    }
+    },
   )
 
   // Get all users (better-auth users)
@@ -284,19 +290,8 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
     }
 
     try {
-      const users = await db.user.findMany({
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          emailVerified: true,
-          image: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
+      const users = await db.query.user.findMany({
+        orderBy: [desc(schema.user.createdAt)],
       });
 
       return {
@@ -331,17 +326,8 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
       }
 
       try {
-        const user = await db.user.findUnique({
-          where: { id: params.id },
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            emailVerified: true,
-            image: true,
-            createdAt: true,
-            updatedAt: true,
-          },
+        const user = await db.query.user.findFirst({
+          where: eq(schema.user.id, params.id),
         });
 
         if (!user) {
@@ -362,7 +348,7 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
           error: "Failed to fetch user",
         };
       }
-    }
+    },
   )
 
   // Update user information (better-auth user)
@@ -404,35 +390,28 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
           };
         }
 
-        const updatedUser = await db.user.update({
-          where: { id: params.id },
-          data: {
+        const updatedUsers = await db
+          .update(schema.user)
+          .set({
             name: name.trim(),
             email: email.toLowerCase().trim(),
             updatedAt: new Date(),
-          },
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            emailVerified: true,
-            image: true,
-            updatedAt: true,
-          },
-        });
+          })
+          .where(eq(schema.user.id, params.id))
+          .returning();
 
         return {
           success: true,
-          user: updatedUser,
+          user: updatedUsers[0],
           message: "User updated successfully",
         };
       } catch (error) {
         console.error("Error updating user:", error);
 
-        // Handle unique constraint violation for email
         if (
           error instanceof Error &&
-          error.message.includes("Unique constraint")
+          (error.message.includes("Unique constraint") ||
+            error.message.includes("unique"))
         ) {
           return {
             success: false,
@@ -445,7 +424,7 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
           error: "Failed to update user",
         };
       }
-    }
+    },
   )
 
   // Get all courses with admin access
@@ -459,39 +438,31 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
     }
 
     try {
-      const courses = await db.course.findMany({
-        select: {
-          id: true,
-          name: true,
-          randomId: true,
-          quote: true,
-          quoteAuthor: true,
-          assignmentCount: true,
-          showDebt: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-        orderBy: {
-          name: "asc",
-        },
+      const courses = await db.query.courses.findMany({
+        orderBy: [asc(schema.courses.name)],
       });
 
-      // Get counts separately for each course
       const coursesWithCounts = await Promise.all(
         courses.map(async (course) => {
-          const [canvasUsersCount, questionsCount] = await Promise.all([
-            db.canvasUser.count({ where: { courseId: course.id } }),
-            db.question.count({ where: { courseId: course.id } }),
+          const [canvasUsersRes, questionsRes] = await Promise.all([
+            db
+              .select({ count: count() })
+              .from(schema.users)
+              .where(eq(schema.users.courseId, course.id)),
+            db
+              .select({ count: count() })
+              .from(schema.questions)
+              .where(eq(schema.questions.courseId, course.id)),
           ]);
 
           return {
             ...course,
             _count: {
-              canvasUsers: canvasUsersCount,
-              questions: questionsCount,
+              canvasUsers: canvasUsersRes[0]?.count ?? 0,
+              questions: questionsRes[0]?.count ?? 0,
             },
           };
-        })
+        }),
       );
 
       return {
@@ -530,19 +501,22 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
       try {
         const { quote, quoteAuthor, showDebt } = body;
 
-        const updatedCourse = await db.course.update({
-          where: { id: params.id },
-          data: {
-            quote: quote !== undefined ? quote : undefined,
-            quoteAuthor: quoteAuthor !== undefined ? quoteAuthor : undefined,
-            showDebt: showDebt !== undefined ? showDebt : undefined,
-            updatedAt: new Date(),
-          },
-        });
+        const updateData: Partial<typeof schema.courses.$inferInsert> = {
+          updatedAt: new Date(),
+        };
+        if (quote !== undefined) updateData.quote = quote;
+        if (quoteAuthor !== undefined) updateData.quoteAuthor = quoteAuthor;
+        if (showDebt !== undefined) updateData.showDebt = showDebt;
+
+        const updatedCourses = await db
+          .update(schema.courses)
+          .set(updateData)
+          .where(eq(schema.courses.id, params.id))
+          .returning();
 
         return {
           success: true,
-          course: updatedCourse,
+          course: updatedCourses[0],
           message: "Course updated successfully",
         };
       } catch (error) {
@@ -552,5 +526,5 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
           error: "Failed to update course",
         };
       }
-    }
+    },
   );
