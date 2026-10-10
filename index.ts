@@ -13,13 +13,10 @@ import { auth } from "./src/auth.js";
 import { env } from "./src/env.js";
 
 const app = new Elysia()
-  // CORS middleware
+  // CORS middleware - allow all origins while supporting credentials
   .use(
     cors({
-      origin:
-        env.NODE_ENV === "production"
-          ? "https://your-frontend-domain.com"
-          : "http://localhost:5173",
+      origin: true,
       methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
       credentials: true,
       allowedHeaders: ["Content-Type", "Authorization"],

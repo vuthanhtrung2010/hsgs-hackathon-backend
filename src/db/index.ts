@@ -11,7 +11,17 @@ if (!databaseUrl) {
   throw new Error("DATABASE_URL environment variable is required");
 }
 
-const client = new SQL(databaseUrl);
+function sanitizeDatabaseUrl(rawUrl: string): string {
+  try {
+    const url = new URL(rawUrl);
+    url.searchParams.delete("schema");
+    return url.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
+const client = new SQL(sanitizeDatabaseUrl(databaseUrl));
 
 export const db = drizzle({ client, schema });
 export { schema };
