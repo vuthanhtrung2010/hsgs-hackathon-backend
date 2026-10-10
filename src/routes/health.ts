@@ -1,12 +1,13 @@
 import { Elysia } from "elysia";
-import { db } from "../db.js";
+import { db } from "../db/index.js";
+import { sql } from "drizzle-orm";
 
 export const healthRoutes = new Elysia({ prefix: "/api/health" }).get(
   "/",
   async () => {
     try {
       // Test database connection
-      await db.user.findFirst();
+      await db.execute(sql`SELECT 1`);
 
       return {
         status: "healthy",
