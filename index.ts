@@ -62,6 +62,10 @@ const app = new Elysia()
         manual: "POST /api/sync",
         status: "/api/sync/status/:courseId",
       },
+      subLeaderboards: {
+        ranking: "/api/ranking/sub/:id",
+        admin: "/api/admin/sub-leaderboards",
+      },
     },
   }))
 
