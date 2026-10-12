@@ -1,6 +1,6 @@
 # Sub-Leaderboards Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Implement the sub-leaderboard subsystem allowing admins to create and manage scoped leaderboards for subsets of students by Canvas student IDs, and public users to view sub-leaderboard rankings via unique CUIDs.
 
@@ -31,7 +31,7 @@
 **Interfaces:**
 - Produces: `subLeaderboards`, `subLeaderboardMembers`, `subLeaderboardsRelations`, `subLeaderboardMembersRelations` exported from `src/db/schema.ts`.
 
-- [ ] **Step 1: Write the failing schema test**
+- [x] **Step 1: Write the failing schema test**
 
 Create `tests/sub-leaderboard-schema.test.ts`:
 ```typescript
@@ -74,12 +74,12 @@ describe("Sub-leaderboards Schema", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/sub-leaderboard-schema.test.ts`
 Expected: FAIL with `subLeaderboards is not defined`.
 
-- [ ] **Step 3: Implement minimal schema additions**
+- [x] **Step 3: Implement minimal schema additions**
 
 In `src/db/schema.ts`:
 1. Define `subLeaderboards` table:
@@ -154,17 +154,17 @@ export const subLeaderboardMembersRelations = relations(
 ```
 And add `subLeaderboards: many(subLeaderboards)` to `coursesRelations`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `bun test tests/sub-leaderboard-schema.test.ts`
 Expected: PASS (5 passed).
 
-- [ ] **Step 5: Generate drizzle migration**
+- [x] **Step 5: Generate drizzle migration**
 
 Run: `bun x drizzle-kit generate`
 Expected: Generates `drizzle/0002_*.sql` containing `CREATE TABLE "sub_leaderboards"` and `CREATE TABLE "sub_leaderboard_members"`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/db/schema.ts drizzle/ tests/sub-leaderboard-schema.test.ts
@@ -184,7 +184,7 @@ git commit -m "feat(db): add sub_leaderboards and sub_leaderboard_members tables
 - Consumes: `CourseWithThresholds` from schema/types, `db` from `src/db/index.js`, `schema` from `src/db/schema.js`.
 - Produces: `calculateCourseRanking(realCourse, filterStudentIds?)` from `src/services/rankingService.ts`.
 
-- [ ] **Step 1: Write unit tests for rankingService**
+- [x] **Step 1: Write unit tests for rankingService**
 
 Create `tests/ranking-service.test.ts`:
 ```typescript
@@ -217,12 +217,12 @@ describe("rankingService", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/ranking-service.test.ts`
 Expected: FAIL with `Cannot find module '../src/services/rankingService.js'`.
 
-- [ ] **Step 3: Implement `src/services/rankingService.ts` and refactor `src/routes/ranking.ts`**
+- [x] **Step 3: Implement `src/services/rankingService.ts` and refactor `src/routes/ranking.ts`**
 
 Create `src/services/rankingService.ts`:
 ```typescript
@@ -382,12 +382,12 @@ const rankingData = await calculateCourseRanking(realCourse);
 return rankingData;
 ```
 
-- [ ] **Step 4: Run tests to verify it passes**
+- [x] **Step 4: Run tests to verify it passes**
 
 Run: `bun test tests/ranking-service.test.ts tests/ranking.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/services/rankingService.ts src/routes/ranking.ts tests/ranking-service.test.ts
@@ -406,7 +406,7 @@ git commit -m "refactor: extract calculateCourseRanking service"
 - Consumes: `calculateCourseRanking` from `src/services/rankingService.ts`, `subLeaderboards` from `src/db/schema.ts`.
 - Produces: `GET /api/ranking/sub/:id` endpoint on `rankingRoutes`.
 
-- [ ] **Step 1: Write test for public sub-leaderboard route**
+- [x] **Step 1: Write test for public sub-leaderboard route**
 
 Create `tests/sub-leaderboard-ranking-route.test.ts`:
 ```typescript
@@ -426,12 +426,12 @@ describe("Sub-leaderboard Ranking Route", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/sub-leaderboard-ranking-route.test.ts`
 Expected: FAIL with 404 route not found (or Elysia default handling).
 
-- [ ] **Step 3: Add `GET /sub/:id` handler to `rankingRoutes`**
+- [x] **Step 3: Add `GET /sub/:id` handler to `rankingRoutes`**
 
 In `src/routes/ranking.ts`:
 ```typescript
@@ -480,12 +480,12 @@ In `src/routes/ranking.ts`:
 })
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `bun test tests/sub-leaderboard-ranking-route.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/routes/ranking.ts tests/sub-leaderboard-ranking-route.test.ts
@@ -505,7 +505,7 @@ git commit -m "feat(ranking): add public GET /api/ranking/sub/:id route"
 - Consumes: `requireAdmin` from `src/middleware/auth.js`, schema tables `subLeaderboards`, `subLeaderboardMembers`, `courses`, `users`.
 - Produces: `adminSubLeaderboardRoutes` mounted in `adminRoutes` (or `adminApp`).
 
-- [ ] **Step 1: Write integration tests for Admin Sub-Leaderboard endpoints**
+- [x] **Step 1: Write integration tests for Admin Sub-Leaderboard endpoints**
 
 Create `tests/admin-sub-leaderboards.test.ts`:
 ```typescript
@@ -536,12 +536,12 @@ describe("Admin Sub-Leaderboard Routes", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test tests/admin-sub-leaderboards.test.ts`
 Expected: FAIL with `Cannot find module '../src/routes/adminSubLeaderboards.js'`.
 
-- [ ] **Step 3: Implement `src/routes/adminSubLeaderboards.ts`**
+- [x] **Step 3: Implement `src/routes/adminSubLeaderboards.ts`**
 
 Create `src/routes/adminSubLeaderboards.ts`:
 ```typescript
@@ -821,12 +821,12 @@ import { adminSubLeaderboardRoutes } from "./adminSubLeaderboards.js";
 adminRoutes.use(adminSubLeaderboardRoutes);
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `bun test tests/admin-sub-leaderboards.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/routes/adminSubLeaderboards.ts src/routes/admin.ts tests/admin-sub-leaderboards.test.ts
@@ -841,7 +841,7 @@ git commit -m "feat(admin): add admin sub-leaderboard CRUD routes"
 - Modify: `index.ts`
 - Run: Full test suite & type checks
 
-- [ ] **Step 1: Update API documentation in `index.ts`**
+- [x] **Step 1: Update API documentation in `index.ts`**
 
 In `index.ts`, add the sub-leaderboard endpoints to the root info response:
 ```typescript
@@ -851,17 +851,17 @@ subLeaderboards: {
 }
 ```
 
-- [ ] **Step 2: Run all tests**
+- [x] **Step 2: Run all tests**
 
 Run: `bun test`
 Expected: All tests pass (including existing and new tests).
 
-- [ ] **Step 3: Run TypeScript compiler check**
+- [x] **Step 3: Run TypeScript compiler check**
 
 Run: `bun x tsc --noEmit`
 Expected: 0 errors.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add index.ts
