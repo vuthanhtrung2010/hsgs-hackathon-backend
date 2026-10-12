@@ -15,6 +15,13 @@
       "when": 1791619153033,
       "tag": "0001_charming_rick_jones",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791819596421,
+      "tag": "0002_misty_steve_rogers",
+      "breakpoints": true
     }
   ]
 }

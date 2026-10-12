@@ -215,6 +215,45 @@ export const topicRatings = pgTable(
   ],
 );
 
+export const subLeaderboards = pgTable(
+  "sub_leaderboards",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    name: text("name").notNull(),
+    courseId: text("courseId")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { mode: "date" })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [index("idx_sub_leaderboards_course").on(table.courseId)],
+);
+
+export const subLeaderboardMembers = pgTable(
+  "sub_leaderboard_members",
+  {
+    id: serial("id").primaryKey(),
+    subLeaderboardId: text("subLeaderboardId")
+      .notNull()
+      .references(() => subLeaderboards.id, { onDelete: "cascade" }),
+    studentId: text("studentId").notNull(),
+    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("sub_leaderboard_members_unique_key").on(
+      table.subLeaderboardId,
+      table.studentId,
+    ),
+    index("idx_sub_leaderboard_members_leaderboard").on(table.subLeaderboardId),
+    index("idx_sub_leaderboard_members_student").on(table.studentId),
+  ],
+);
+
 // ==========================================
 // Better Auth Tables
 // ==========================================
@@ -307,11 +346,33 @@ export const quizzesRelations = relations(quizzes, ({ one }) => ({
 
 export const coursesRelations = relations(courses, ({ many, one }) => ({
   announcements: many(announcements),
+  subLeaderboards: many(subLeaderboards),
   ratingThresholds: one(ratingThresholds, {
     fields: [courses.id],
     references: [ratingThresholds.courseId],
   }),
 }));
+
+export const subLeaderboardsRelations = relations(
+  subLeaderboards,
+  ({ one, many }) => ({
+    course: one(courses, {
+      fields: [subLeaderboards.courseId],
+      references: [courses.id],
+    }),
+    members: many(subLeaderboardMembers),
+  }),
+);
+
+export const subLeaderboardMembersRelations = relations(
+  subLeaderboardMembers,
+  ({ one }) => ({
+    subLeaderboard: one(subLeaderboards, {
+      fields: [subLeaderboardMembers.subLeaderboardId],
+      references: [subLeaderboards.id],
+    }),
+  }),
+);
 
 export const ratingThresholdsRelations = relations(
   ratingThresholds,
