@@ -48,7 +48,10 @@ const app = new Elysia()
     timestamp: new Date().toISOString(),
     endpoints: {
       health: "/api/health",
-      courses: "/api/courses",
+      courses: {
+        list: "/api/courses",
+        students: "/api/courses/:courseId/students",
+      },
       problems: "/api/problems",
       users: {
         details: "/api/users/details/:userId",
@@ -61,6 +64,10 @@ const app = new Elysia()
       sync: {
         manual: "POST /api/sync",
         status: "/api/sync/status/:courseId",
+      },
+      subLeaderboards: {
+        ranking: "/api/ranking/sub/:id",
+        admin: "/api/admin/sub-leaderboards",
       },
     },
   }))
