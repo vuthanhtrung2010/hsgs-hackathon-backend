@@ -1,7 +1,7 @@
 import { Elysia } from "elysia";
 import { db } from "../db/index.js";
 import * as schema from "../db/schema.js";
-import { eq, or, and, inArray } from "drizzle-orm";
+import { eq, or, and, inArray, asc } from "drizzle-orm";
 import { requireAdmin } from "../middleware/auth.js";
 
 export const adminSubLeaderboardRoutes = new Elysia({
@@ -119,6 +119,40 @@ export const adminSubLeaderboardRoutes = new Elysia({
           updatedAt: sl.updatedAt,
         })),
       };
+    },
+  )
+
+  // Get all students enrolled in a course (for sub-leaderboard membership selection)
+  .get(
+    "/course/:randomizedCourseId/students",
+    async ({ request, params: { randomizedCourseId }, set }) => {
+      const authResult = await requireAdmin(request);
+      if (!authResult.success) {
+        set.status = 401;
+        return { success: false, error: authResult.error };
+      }
+
+      const course = await db.query.courses.findFirst({
+        where: or(
+          eq(schema.courses.id, randomizedCourseId),
+          eq(schema.courses.randomId, randomizedCourseId),
+        ),
+      });
+
+      if (!course) {
+        set.status = 404;
+        return { success: false, error: "Course not found" };
+      }
+
+      const courseUsers = await db.query.users.findMany({
+        where: eq(schema.users.courseId, course.id),
+        orderBy: [asc(schema.users.name)],
+      });
+
+      return courseUsers.map((u) => ({
+        id: u.studentId,
+        name: u.name,
+      }));
     },
   )
 

@@ -128,6 +128,19 @@ describe("Admin Sub-Leaderboard Routes", () => {
       expect(listData.success).toBe(true);
       expect(listData.subLeaderboards.length).toBeGreaterThanOrEqual(1);
 
+      // 3b. GET student list for course
+      const studentsRes = await adminSubLeaderboardRoutes.handle(
+        new Request(
+          `http://localhost/api/admin/sub-leaderboards/course/${testCourseId}/students`,
+        ),
+      );
+      expect(studentsRes.status).toBe(200);
+      const studentsData = (await studentsRes.json()) as any;
+      expect(Array.isArray(studentsData)).toBe(true);
+      expect(studentsData.length).toBe(2);
+      expect(studentsData[0]).toEqual({ id: "canvas-101", name: "Alice Wonderland" });
+      expect(studentsData[1]).toEqual({ id: "canvas-102", name: "Bob Builder" });
+
       // 4. GET details with student names & IDs
       const detailRes = await adminSubLeaderboardRoutes.handle(
         new Request(`http://localhost/api/admin/sub-leaderboards/${subLbId}`),
