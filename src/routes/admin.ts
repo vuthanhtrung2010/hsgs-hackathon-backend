@@ -440,6 +440,9 @@ export const adminRoutes = new Elysia({ prefix: "/api/admin" })
     try {
       const courses = await db.query.courses.findMany({
         orderBy: [asc(schema.courses.name)],
+        with: {
+          ratingThresholds: true,
+        },
       });
 
       const coursesWithCounts = await Promise.all(
